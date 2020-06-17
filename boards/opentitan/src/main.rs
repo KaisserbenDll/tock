@@ -70,6 +70,7 @@ struct OpenTitan {
         'static,
         capsules::usb::usbc_client::Client<'static, lowrisc::usbdev::Usb<'static>>,
     >,
+    ipc: kernel::ipc::IPC,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -86,6 +87,7 @@ impl Platform for OpenTitan {
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::low_level_debug::DRIVER_NUM => f(Some(self.lldb)),
             capsules::usb::usb_user::DRIVER_NUM => f(Some(self.usb)),
+            kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
         }
     }
@@ -105,8 +107,10 @@ pub unsafe fn reset_handler() {
     // initialize capabilities
     let process_mgmt_cap = create_capability!(capabilities::ProcessManagementCapability);
     let memory_allocation_cap = create_capability!(capabilities::MemoryAllocationCapability);
-
     let main_loop_cap = create_capability!(capabilities::MainLoopCapability);
+    let grant_cap = create_capability!(capabilities::MemoryAllocationCapability);
+
+
 
     let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
 
@@ -273,6 +277,7 @@ pub unsafe fn reset_handler() {
         hmac,
         lldb: lldb,
         usb,
+        ipc: kernel::ipc::IPC::new(board_kernel, &grant_cap),
     };
 
     kernel::procs::load_processes(
@@ -292,5 +297,5 @@ pub unsafe fn reset_handler() {
         debug!("{:?}", err);
     });
 
-    board_kernel.kernel_loop(&opentitan, chip, None, &main_loop_cap);
+    board_kernel.kernel_loop(&opentitan, chip, Some(&opentitan.ipc), &main_loop_cap);
 }
