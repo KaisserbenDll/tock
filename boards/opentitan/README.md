@@ -76,7 +76,6 @@ $ make flash-app APP=<...> OPENTITAN_TREE=/home/opentitan/
 You will need to have the GCC version of RISC-V 32-bit objcopy installed as the LLVM one doesn't support updating sections.
 
 
-
 Running in QEMU
 ---------------
 
@@ -103,5 +102,4 @@ $ tar xf target/riscv32imac-unknown-none-elf/tab/opentitan/hello_world.tab
 $ cd [TOCK_ROOT]/boards/opentitan
 $ make APP=[LIBTOCK-RS-DIR]/rv32imac.tbf qemu-app
 ```
-Automated Script 
-----------------
+
