@@ -322,25 +322,6 @@ pub trait ProcessType {
     /// Move the process from a previous state to a specific state
     /// This will give the user, the ability to change the process state.
     fn set_state(&self, state: State);
-    // Mapping and Implementation of VPP process Management dedicated Functions
-    /// # Brief:
-    /// Get the Process kernel Handle for itself or for one of its descendants
-    /// # Description:
-    /// This function gets a Process kernel Handle through its Process identifier.
-    /// The process retrieving the Process Handle does not inherit the rights of its owner.
-    /// # Parameter:
-    /// _eProcess_ID   (_MK_PROCESS_ID_u) identifier of the Process
-    // fn _mk_get_process_handle(&self, appid: AppId);
-    //
-    //
-    // fn _mk_get_process_priority(&self);
-    // fn _mk_set_process_priority(&self);
-    // fn _mk_suspend_process(&self);
-    // fn _mk_resume_process(&self);
-    // fn _mk_commit(&self);
-    // fn _mk_rollback(&self);
-    // fn _mk_yield(&self);
-
 
     // memop operations
 
@@ -994,18 +975,6 @@ impl<C: Chip> ProcessType for Process<'_, C> {
     fn get_restart_count(&self) -> usize {
         self.restart_count.get()
     }
-
-    // VPP Process Management dedicated Functions
-    // fn _mk_get_process_handle(&self, _appid: AppId) { unimplemented!(); }
-    // fn _mk_get_process_priority(&self){unimplemented!();}
-    // fn _mk_set_process_priority(&self){unimplemented!();}
-    //
-    // fn _mk_suspend_process(&self){unimplemented!(); stop(&self); }
-    // fn _mk_resume_process(&self){unimplemented!();}
-    // fn _mk_commit(&self){unimplemented!();}
-    // fn _mk_rollback(&self){unimplemented!();}
-    // fn _mk_yield(&self){unimplemented!();}
-
 
     // End Of VPP Process Management dedicated Functions
     fn dequeue_task(&self) -> Option<Task> {

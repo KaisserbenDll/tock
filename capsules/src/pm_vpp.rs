@@ -15,26 +15,33 @@ use kernel::hil::uart;
 use kernel::introspection::KernelInfo;
 use kernel::Kernel;
 use kernel::ReturnCode;
-use kernel::procs::{State, ProcessType};
-use kernel::mloi::MK_ERROR_e;
-use kernel::mloi::MK_ERROR_e::MK_ERROR_NONE;
-use kernel::mloi::*;
+use kernel::procs::{State, ProcessType, Process};
+use crate::mloi::MK_ERROR_e;
+use crate::mloi::MK_ERROR_e::{MK_ERROR_NONE, MK_ERROR_UNKNOWN_HANDLE, MK_ERROR_ACCESS_DENIED};
+use crate::mloi::*;
 
-pub struct VppProcessManager<C: ProcessManagementCapability> {
+pub struct VppProcess<'a> {
+    process: &'a mut dyn ProcessType,
+    vppstate:  VppState,
+}
+pub struct VppProcessManager<'a, C: ProcessManagementCapability> {
     kernel: &'static Kernel,
+    vpp_process: VppProcess<'a>,
     capability: C,
 }
 
-impl<C: ProcessManagementCapability> VppProcessManager<C> {
-    pub fn new(
-        kernel: &'static Kernel,
-        capability: C ) ->
-        VppProcessManager<C> {
-        VppProcessManager {
-            kernel: kernel,
-            capability: capability,
-        }
-    }
+impl<'a,C: ProcessManagementCapability> VppProcessManager<'a,C> {
+    // pub fn new<'a>(
+    //     kernel: &'static Kernel,
+    //     vpp_process: VppProcess<'a,C>,
+    //     capability: C ) ->
+    //     VppProcessManager<C> {
+    //     VppProcessManager {
+    //         kernel: kernel,
+    //         vpp_process: VppProcess { process: &(), vppstate: VppState::READY },
+    //         capability: capability,
+    //     }
+    // }
     pub fn start(&self) -> ReturnCode {
         debug!("Starting process console");
         ReturnCode::SUCCESS
@@ -62,16 +69,34 @@ impl<C: ProcessManagementCapability> VppProcessManager<C> {
     /// # Parameter:
     /// _hProcess   (_MK_HANDLE_t)  Handle of the Process to be suspended
 
-    pub fn _mk_suspend_process(&self, _hProcess: &dyn ProcessType) -> MK_ERROR_e {
-         self.kernel.process_each_capability(
-                &self.capability,
-                |_hProcess| {
-                    let proc_name = _hProcess.get_process_name();
-                    _hProcess.stop();
-                    debug!("Process {} Suspended", proc_name);
-                }
-         );
-      MK_ERROR_NONE
+     fn _mk_suspend_process(&self, mut _hProcess: VppProcess) -> MK_ERROR_e {
+        //Check if the Process Handle is valid
+        // if _hProcess.process.
+        // MK_ERROR_UNKNOWN_HANDLE
+
+        // Check if the Process is not itself or any of its descendants
+        // MK_ERROR_ACCESS_DENIED
+
+        match _hProcess.vppstate {
+            VppState::READY => _hProcess.vppstate = VppState::SUSPENDED_R,
+            VppState::RUNNING => _hProcess.vppstate = VppState::SUSPENDED_R,
+            VppState::WAITING => _hProcess.vppstate = VppState::SUSPENDED_W,
+            VppState::SYNC => _hProcess.vppstate = VppState::SUSPENDED_S,
+            _ => {}
+        }
+        let proc_name = _hProcess.process.get_process_name();
+        _hProcess.process.stop();
+        debug!("Process {} Suspended", proc_name);
+
+        // self.kernel.process_each_capability(
+        //         &self.capability,
+        //         |_hProcess| {
+        //             let proc_name = _hProcess.get_process_name();
+        //             _hProcess.tock_pointer.stop();
+        //             debug!("Process {} Suspended", proc_name);
+        //         }
+        //  );
+        MK_ERROR_NONE
     }
     /// # Brief:
     /// Resume a Process
@@ -80,15 +105,25 @@ impl<C: ProcessManagementCapability> VppProcessManager<C> {
     /// the running Process
     /// # Parameter:
     /// _hProcess   (_MK_HANDLE_t)  Handle of the Process to be suspended
-    fn _mk_resume_process(&self, _hProcess: &dyn ProcessType) -> MK_ERROR_e {
-        self.kernel.process_each_capability(
-        &self.capability,
-        |_hProcess| {
-            let proc_name = _hProcess.get_process_name();
-            _hProcess.resume();
-            debug!("Process {} Resumed", proc_name);
-            }
-        );
+
+    fn _mk_resume_process(&self, mut _hProcess: VppProcess ) -> MK_ERROR_e {
+        //Check if the Process Handle is valid
+        // if _hProcess.process.
+        // MK_ERROR_UNKNOWN_HANDLE
+
+        // Check if the Process is not itself or any of its descendants
+        // MK_ERROR_ACCESS_DENIED
+
+        match _hProcess.vppstate {
+            VppState::SUSPENDED_R => _hProcess.vppstate = VppState::READY,
+            VppState::SUSPENDED_W => _hProcess.vppstate = VppState::WAITING,
+            VppState::SUSPENDED_S => _hProcess.vppstate = VppState::SYNC,
+            _ => {},
+        }
+        let proc_name = _hProcess.process.get_process_name();
+        _hProcess.process.resume();
+        debug!("Process {} Resumed", proc_name);
+
         MK_ERROR_NONE
     }
     fn _mk_commit(&self){unimplemented!();}
@@ -102,6 +137,7 @@ impl<C: ProcessManagementCapability> VppProcessManager<C> {
     /// # Parameter:
     /// void  None
     fn _mk_yield(&self){
+
         self.kernel.process_each_capability(
             &self.capability,
             |process| {

@@ -35,20 +35,29 @@ type v32_u = u32 ;
 /// 32-bit bitmap for Exception, Signal or LIB Descriptor conveyor
 
 /// Enumerated Signal type
-// pub enum VPPSTATE{
-//     READY,
-//     RUNNING,
-// }
+
 /// Handle to a Kernel Object
 // pub struct VppProcess{
-    // process: &dyn ProcessType,
-    // VPPstate: VPPSTATE,
-    // }
+// process: &dyn ProcessType,
+// VPPstate: VPPSTATE,
+// }
 
 /// Time unsigned 64-bit integer
 type MK_TIME_t = u64;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// VPP States
+pub enum VppState {
+    READY,
+    RUNNING,
+    SUSPENDED_R,
+    WAITING,
+    SUSPENDED_W,
+    SYNC,
+    SUSPENDED_S,
+    DEAD,
+    ANY_STATE,
+}
+
 /// Priority Values of a Process (Table 7-4)
 pub enum MK_PROCESS_PRIORITY_e{
     /// Lowest Priority
