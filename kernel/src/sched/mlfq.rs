@@ -1,24 +1,28 @@
 //! Multilevel feedback queue scheduler for Tock
 //!
 //! Based on the MLFQ rules described in "Operating Systems: Three Easy Pieces"
-//! By Remzi H. Arpaci-Dusseau and Andrea C. Arpaci-Dusseau
+//! by Remzi H. Arpaci-Dusseau and Andrea C. Arpaci-Dusseau.
 //!
 //! This scheduler can be summarized by the following rules:
 //!
-//! Rule 1: If Priority(A) > Priority(B), and both are ready, A runs (B doesn’t).
-//! Rule 2: If Priority(A) = Priority(B), A & B run in round-robin fashion using the
-//!         time slice (quantum length) of the given queue.
-//! Rule 3: When a job enters the system, it is placed at the highest priority (the topmost queue).
-//! Rule 4: Once a job uses up its time allotment at a given level (regardless of how
-//!         many times it has given up the CPU), its priority is reduced
-//!         (i.e., it moves down one queue).
-//! Rule 5: After some time period S, move all the jobs in the system to the topmost queue.
+//! - Rule 1: If Priority(A) > Priority(B), and both are ready, A runs (B
+//!           doesn't).
+//! - Rule 2: If Priority(A) = Priority(B), A & B run in round-robin fashion
+//!           using the time slice (quantum length) of the given queue.
+//! - Rule 3: When a job enters the system, it is placed at the highest priority
+//!           (the topmost queue).
+//! - Rule 4: Once a job uses up its time allotment at a given level (regardless
+//!           of how many times it has given up the CPU), its priority is
+//!           reduced (i.e., it moves down one queue).
+//! - Rule 5: After some time period S, move all the jobs in the system to the
+//!           topmost queue.
 
 use crate::callback::AppId;
 use crate::common::list::{List, ListLink, ListNode};
 use crate::hil::time;
 use crate::hil::time::Frequency;
 use crate::platform::Chip;
+use crate::process::ProcessType;
 use crate::sched::{Kernel, Scheduler, SchedulingDecision, StoppedExecutingReason};
 use core::cell::Cell;
 
@@ -30,15 +34,15 @@ struct MfProcState {
 
 /// Nodes store per-process state
 pub struct MLFQProcessNode<'a> {
-    appid: AppId,
+    proc: &'static Option<&'static dyn ProcessType>,
     state: MfProcState,
     next: ListLink<'a, MLFQProcessNode<'a>>,
 }
 
 impl<'a> MLFQProcessNode<'a> {
-    pub fn new(appid: AppId) -> MLFQProcessNode<'a> {
+    pub fn new(proc: &'static Option<&'static dyn ProcessType>) -> MLFQProcessNode<'a> {
         MLFQProcessNode {
-            appid,
+            proc,
             state: MfProcState::default(),
             next: ListLink::empty(),
         }
@@ -52,7 +56,6 @@ impl<'a> ListNode<'a, MLFQProcessNode<'a>> for MLFQProcessNode<'a> {
 }
 
 pub struct MLFQSched<'a, A: 'static + time::Alarm<'static>> {
-    kernel: &'static Kernel,
     alarm: &'static A,
     pub processes: [List<'a, MLFQProcessNode<'a>>; 3], // Using Self::NUM_QUEUES causes rustc to crash..
     next_reset: Cell<u32>,
@@ -65,9 +68,8 @@ impl<'a, A: 'static + time::Alarm<'static>> MLFQSched<'a, A> {
     pub const PRIORITY_REFRESH_PERIOD_MS: u32 = 5000;
     pub const NUM_QUEUES: usize = 3;
 
-    pub fn new(kernel: &'static Kernel, alarm: &'static A) -> Self {
+    pub fn new(alarm: &'static A) -> Self {
         Self {
-            kernel,
             alarm,
             processes: [List::new(), List::new(), List::new()],
             next_reset: Cell::new(0),
@@ -104,10 +106,9 @@ impl<'a, A: 'static + time::Alarm<'static>> MLFQSched<'a, A> {
     /// This method moves that node to the head of its queue.
     fn get_next_ready_process_node(&self) -> (Option<&MLFQProcessNode<'a>>, usize) {
         for (idx, queue) in self.processes.iter().enumerate() {
-            let next = queue.iter().find(|node_ref| {
-                self.kernel
-                    .process_map_or(false, node_ref.appid, |proc| proc.ready())
-            });
+            let next = queue
+                .iter()
+                .find(|node_ref| node_ref.proc.map_or(false, |proc| proc.ready()));
             if next.is_some() {
                 // pop procs to back until we get to match
                 loop {
@@ -145,10 +146,10 @@ impl<'a, A: 'static + time::Alarm<'static>, C: Chip> Scheduler<C> for MLFQSched<
                 self.redeem_all_procs();
             }
             let (node_ref_opt, queue_idx) = self.get_next_ready_process_node();
-            let node_ref = node_ref_opt.unwrap(); //Panic if fail bc processes_blocked()!
+            let node_ref = node_ref_opt.unwrap(); // Panic if fail bc processes_blocked()!
             let timeslice =
                 self.get_timeslice_us(queue_idx) - node_ref.state.us_used_this_queue.get();
-            let next = node_ref.appid;
+            let next = node_ref.proc.unwrap().appid(); // Panic if fail bc processes_blocked()!
             self.last_queue_idx.set(queue_idx);
             self.last_timeslice.set(timeslice);
 
