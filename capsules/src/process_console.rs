@@ -111,6 +111,7 @@
 //! Process blink stopped
 //! ```
 
+#![allow(unused_imports)]
 use core::cell::Cell;
 use core::cmp;
 use core::str;
@@ -121,6 +122,8 @@ use kernel::hil::uart;
 use kernel::introspection::KernelInfo;
 use kernel::Kernel;
 use kernel::ReturnCode;
+use kernel::procs::{State, ProcessType};
+
 
 // Since writes are character echoes, we do not need more than 4 bytes:
 // the longest write is 3 bytes for a backspace (backspace, space, backspace).
@@ -182,12 +185,11 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
                 self.rx_in_progress.set(true);
                 self.uart.receive_buffer(buffer, 1);
                 self.running.set(true);
-                //debug!("Starting process console");
+                debug!("Starting process console");
             });
         }
         ReturnCode::SUCCESS
     }
-
     // Process the command in the command buffer and clear the buffer.
     fn read_command(&self) {
         self.command_buffer.map(|command| {
@@ -211,7 +213,8 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
                         if clean_str.starts_with("help") {
                             debug!("Welcome to the process console.");
                             debug!("Valid commands are: help status list stop start fault");
-                        } else if clean_str.starts_with("start") {
+                        }
+                        else if clean_str.starts_with("start") {
                             let argument = clean_str.split_whitespace().nth(1);
                             argument.map(|name| {
                                 self.kernel.process_each_capability(
@@ -225,6 +228,7 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
                                     },
                                 );
                             });
+
                         } else if clean_str.starts_with("stop") {
                             let argument = clean_str.split_whitespace().nth(1);
                             argument.map(|name| {
@@ -239,7 +243,8 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
                                     },
                                 );
                             });
-                        } else if clean_str.starts_with("fault") {
+                         }
+                        else if clean_str.starts_with("fault") {
                             let argument = clean_str.split_whitespace().nth(1);
                             argument.map(|name| {
                                 self.kernel.process_each_capability(
@@ -253,7 +258,8 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
                                     },
                                 );
                             });
-                        } else if clean_str.starts_with("list") {
+                        }
+                        else if clean_str.starts_with("list") {
                             debug!(" PID    Name                Quanta  Syscalls  Dropped Callbacks  Restarts    State  Grants");
                             self.kernel
                                 .process_each_capability(&self.capability, |proc| {
@@ -276,7 +282,8 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
                                         grants_total
                                     );
                                 });
-                        } else if clean_str.starts_with("status") {
+                        }
+                        else if clean_str.starts_with("status") {
                             let info: KernelInfo = KernelInfo::new(self.kernel);
                             debug!(
                                 "Total processes: {}",
@@ -290,7 +297,46 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
                                 "Timeslice expirations: {}",
                                 info.timeslice_expirations(&self.capability)
                             );
-                        } else {
+                        }
+                        else if clean_str.starts_with("Unstart") {
+                            let argument = clean_str.split_whitespace().nth(1);
+                            argument.map(|name| {
+                                self.kernel.process_each_capability(
+                                    &self.capability,
+                                    |proc| {
+                                        let proc_name = proc.get_process_name();
+                                        if proc_name == name {
+                                            proc.set_state(State::Unstarted);
+                                            debug!("Process {} Unstarted", proc_name);
+                                        }
+
+                                    },
+                                );
+                            });
+                        }
+                        // else if clean_str.starts_with("test") {
+                        //     let argument = clean_str.split_whitespace().nth(1);
+                        //     argument.map(|name| {
+                        //         self.kernel.process_each_capability(
+                        //             &self.capability,
+                        //             |proc| {
+                        //                 let proc_name = proc.get_process_name();
+                        //                 if proc_name == name {
+                        //                     //proc.set_state(State::Unstarted);
+                        //                     // let handle= MK_HANDLE_t{ process: proc };
+                        //                     // manager._mk_suspend_process(handle);
+                        //                     self._mk_suspend_process(proc);
+                        //                     debug!("Process {} Suspended", proc_name);
+                        //                 }
+                        //
+                        //             },
+                        //         );
+                        //     });
+                        //
+                        //
+                        //
+                        // }
+                        else {
                             debug!("Valid commands are: help status list stop start fault");
                         }
                     }

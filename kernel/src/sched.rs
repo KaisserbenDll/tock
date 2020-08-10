@@ -85,8 +85,7 @@ pub trait Scheduler<C: Chip> {
     /// every loop to check with the scheduler if it wants to continue trying to execute
     /// this process.
     ///
-    /// Most
-    /// schedulers will use this default implementation, which causes the `do_process()`
+    /// Most schedulers will use this default implementation, which causes the `do_process()`
     /// loop to return if there are interrupts or deferred calls that need to be serviced.
     /// However, schedulers which wish to defer interrupt handling may change this, or
     /// priority schedulers which wish to check if the execution of the current process

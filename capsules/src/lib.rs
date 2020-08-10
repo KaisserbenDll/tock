@@ -1,3 +1,4 @@
+
 #![feature(const_fn)]
 #![forbid(unsafe_code)]
 #![no_std]
@@ -51,6 +52,7 @@ pub mod nonvolatile_to_pages;
 pub mod nrf51822_serialization;
 pub mod panic_button;
 pub mod pca9544a;
+pub mod pm_vpp;
 pub mod process_console;
 pub mod rf233;
 pub mod rf233_const;

@@ -96,11 +96,14 @@ pub mod debug;
 pub mod hil;
 pub mod introspection;
 pub mod ipc;
+pub mod mloi;
 pub mod syscall;
 
 mod callback;
 mod config;
+// mod datatypes;
 mod driver;
+// mod errorcodes_vpp;
 mod grant;
 mod mem;
 mod memop;

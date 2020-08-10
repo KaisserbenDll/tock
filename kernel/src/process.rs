@@ -280,6 +280,7 @@ pub trait ProcessType {
     /// or "yielded".
     fn get_state(&self) -> State;
 
+
     /// Move this process from the running state to the yielded state.
     ///
     /// This will fail (i.e. not do anything) if the process was not previously
@@ -307,6 +308,29 @@ pub trait ProcessType {
 
     /// Get the name of the process. Used for IPC.
     fn get_process_name(&self) -> &'static str;
+    // helper function for setting process states
+    /// Move the process from a previous state to a specific state
+    /// This will give the user, the ability to change the process state.
+    fn set_state(&self, state: State);
+    // Mapping and Implementation of VPP process Management dedicated Functions
+    /// # Brief:
+    /// Get the Process kernel Handle for itself or for one of its descendants
+    /// # Description:
+    /// This function gets a Process kernel Handle through its Process identifier.
+    /// The process retrieving the Process Handle does not inherit the rights of its owner.
+    /// # Parameter:
+    /// _eProcess_ID   (_MK_PROCESS_ID_u) identifier of the Process
+    // fn _mk_get_process_handle(&self, appid: AppId);
+    //
+    //
+    // fn _mk_get_process_priority(&self);
+    // fn _mk_set_process_priority(&self);
+    // fn _mk_suspend_process(&self);
+    // fn _mk_resume_process(&self);
+    // fn _mk_commit(&self);
+    // fn _mk_rollback(&self);
+    // fn _mk_yield(&self);
+
 
     // memop operations
 
@@ -903,10 +927,14 @@ impl<C: Chip> ProcessType for Process<'_, C> {
             }
         });
     }
-
+    fn set_state(&self, state: State)  {
+        self.state.set(state);
+    }
     fn get_state(&self) -> State {
         self.state.get()
     }
+
+
 
     fn set_yielded_state(&self) {
         if self.state.get() == State::Running {
@@ -957,6 +985,19 @@ impl<C: Chip> ProcessType for Process<'_, C> {
         self.restart_count.get()
     }
 
+    // VPP Process Management dedicated Functions
+    // fn _mk_get_process_handle(&self, _appid: AppId) { unimplemented!(); }
+    // fn _mk_get_process_priority(&self){unimplemented!();}
+    // fn _mk_set_process_priority(&self){unimplemented!();}
+    //
+    // fn _mk_suspend_process(&self){unimplemented!(); stop(&self); }
+    // fn _mk_resume_process(&self){unimplemented!();}
+    // fn _mk_commit(&self){unimplemented!();}
+    // fn _mk_rollback(&self){unimplemented!();}
+    // fn _mk_yield(&self){unimplemented!();}
+
+
+    // End Of VPP Process Management dedicated Functions
     fn dequeue_task(&self) -> Option<Task> {
         self.tasks.map_or(None, |tasks| {
             tasks.dequeue().map(|cb| {
@@ -2117,3 +2158,4 @@ impl<C: 'static + Chip> Process<'_, C> {
         current_state != State::StoppedFaulted && current_state != State::Fault
     }
 }
+
