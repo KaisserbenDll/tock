@@ -5,6 +5,8 @@
 #![allow(unused_imports)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
+#![allow(dead_code)]
+
 use core::cell::Cell;
 use core::cmp;
 use core::str;
