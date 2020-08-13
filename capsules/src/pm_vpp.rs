@@ -21,14 +21,20 @@ use kernel::procs::{State, ProcessType, Process};
 use crate::mloi::MK_ERROR_e;
 use crate::mloi::MK_ERROR_e::{MK_ERROR_NONE, MK_ERROR_UNKNOWN_HANDLE, MK_ERROR_ACCESS_DENIED};
 use crate::mloi::*;
+use crate::mloi::MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_ERROR;
 
 pub struct VppProcess<'a> {
     process: &'a mut dyn ProcessType,
     vppstate:  VppState,
+    priority: MK_PROCESS_PRIORITY_e,
+    id: u16,
+
 }
+
 pub struct VppProcessManager<'a, C: ProcessManagementCapability> {
     kernel: &'static Kernel,
-    vpp_process: VppProcess<'a>,
+    vpp_process: VppProcess<'a>, //array of PROCESSES [&P1, &P2]
+    vpp_process_ids: u32, //[7544, 8512]
     capability: C,
 }
 
@@ -44,6 +50,8 @@ impl<'a,C: ProcessManagementCapability> VppProcessManager<'a,C> {
     //         capability: capability,
     //     }
     // }
+
+    /// Testing Function
     pub fn start(&self) -> ReturnCode {
         debug!("Starting process console");
         ReturnCode::SUCCESS
@@ -55,12 +63,51 @@ impl<'a,C: ProcessManagementCapability> VppProcessManager<'a,C> {
     /// The process retrieving the Process Handle does not inherit the rights of its owner.
     /// # Parameter:
     /// _eProcess_ID   (_MK_PROCESS_ID_u) identifier of the Process
-    fn _mk_get_process_handle(&self, _eProcess_ID: AppId) -> MK_ERROR_e {
-            unimplemented!();
+
+    // fn get_process_reference_internal (MK_HANDLE)
+    // iterate the array of the PROCESSES
+    // lookup for MK_HANDLE id
+    // when match gives
+    // if the first 16 bits of the MK_HANDLE matches the id of any process
+
+
+    fn _mk_get_process_handle(&self, _eProcess_ID: u16) -> & VppProcess<'a> {
+        let appid = self.vpp_process.process.appid();
+        // if appid =  _eProcess_ID {
+        //     self.vpp_process
+        // }
+
+
+    }
+    /// # Brief:
+    /// Get the Process priority.
+    /// # Description:
+    /// This function gets the priority of a Process.
+    /// # Parameter:
+    /// _hProcess   (_MK_HANDLE_t)  Handle of the Process.
+    fn _mk_get_process_priority(&self, _hProcess: VppProcess) -> MK_PROCESS_PRIORITY_e {
+        let priority = _hProcess.priority;
+        priority
+    }
+
+
+    fn _mk_set_process_priority(&self, _hProcess: VppProcess, _xPriority: MK_PROCESS_PRIORITY_e)
+        -> MK_ERROR_e{
+        // Depending of the Scheduler Type ? How can this be implemented.
+        // Based on the index on the PROCESSES Array, priorities can be defined
+        // index 0: MK_PROCESS_PRIORITY_HIGH
+        // index 1: MK_PROCESS_PRIORITY_NORMAL
+        // index 2: MK_PROCESS_PRIORITY_LOW
+        //
+        match _hProcess.process.appid().index() {
+
+            _ => {}
         }
 
-    fn _mk_get_process_priority(&self){unimplemented!();}
-    fn _mk_set_process_priority(&self){unimplemented!();}
+
+
+        MK_ERROR_e::MK_ERROR_NONE
+    }
 
     /// # Brief:
     /// Suspend a Process. A Process can suspend itself or any of its descendants.
@@ -71,7 +118,9 @@ impl<'a,C: ProcessManagementCapability> VppProcessManager<'a,C> {
     /// # Parameter:
     /// _hProcess   (_MK_HANDLE_t)  Handle of the Process to be suspended
 
-     fn _mk_suspend_process(&self, mut _hProcess: VppProcess) -> MK_ERROR_e {
+    fn _mk_suspend_process(&self, mut _hProcess: VppProcess) -> MK_ERROR_e {
+        //get reference internal => VPP Process
+
         //Check if the Process Handle is valid
         // if _hProcess.process.
         // MK_ERROR_UNKNOWN_HANDLE
@@ -98,7 +147,7 @@ impl<'a,C: ProcessManagementCapability> VppProcessManager<'a,C> {
         //             debug!("Process {} Suspended", proc_name);
         //         }
         //  );
-        MK_ERROR_NONE
+        MK_ERROR_e::MK_ERROR_NONE
     }
     /// # Brief:
     /// Resume a Process
@@ -108,7 +157,7 @@ impl<'a,C: ProcessManagementCapability> VppProcessManager<'a,C> {
     /// # Parameter:
     /// _hProcess   (_MK_HANDLE_t)  Handle of the Process to be suspended
 
-    fn _mk_resume_process(&self, mut _hProcess: VppProcess ) -> MK_ERROR_e {
+    fn _mk_resume_process(&self, mut _hProcess: VppProcess) -> MK_ERROR_e {
         //Check if the Process Handle is valid
         // if _hProcess.process.
         // MK_ERROR_UNKNOWN_HANDLE
@@ -126,10 +175,13 @@ impl<'a,C: ProcessManagementCapability> VppProcessManager<'a,C> {
         _hProcess.process.resume();
         debug!("Process {} Resumed", proc_name);
 
-        MK_ERROR_NONE
+        MK_ERROR_e::MK_ERROR_NONE
     }
-    fn _mk_commit(&self){unimplemented!();}
-    fn _mk_rollback(&self){unimplemented!();}
+
+    fn _mk_Request_No_Preemption(&self) { unimplemented!(); }
+    fn _mk_commit(&self) { unimplemented!(); }
+    fn _mk_rollback(&self) { unimplemented!(); }
+
     /// # Brief:
     /// Return the control to the kernel scheduler.
     /// # Description:
@@ -138,165 +190,14 @@ impl<'a,C: ProcessManagementCapability> VppProcessManager<'a,C> {
     /// scheduled to run by the scheduler.
     /// # Parameter:
     /// void  None
-    fn _mk_yield(&self){
-
-        self.kernel.process_each_capability(
-            &self.capability,
-            |process| {
-                process.set_yielded_state();
-                debug!("Process yielded");
-            }
-        )
+    fn _mk_yield(&mut self) {
+        match self.vpp_process.vppstate {
+            VppState::RUNNING => self.vpp_process.vppstate = VppState::READY,
+            _ => {},
+        }
+        let proc_name = self.vpp_process.process.get_process_name();
+        self.vpp_process.process.set_yielded_state();
+        debug!("Process {} Resumed", proc_name);
     }
-    // Process the command in the command buffer and clear the buffer.
-    // fn read_command(&self) {
-    //     self.command_buffer.map(|command| {
-    //         let mut terminator = 0;
-    //         let len = command.len();
-    //         for i in 0..len {
-    //             if command[i] == 0 {
-    //                 terminator = i;
-    //                 break;
-    //             }
-    //         }
-    //         //debug!("Command: {}-{} {:?}", start, terminator, command);
-    //         // A command is valid only if it starts inside the buffer,
-    //         // ends before the beginning of the buffer, and ends after
-    //         // it starts.
-    //         if terminator > 0 {
-    //             let cmd_str = str::from_utf8(&command[0..terminator]);
-    //             match cmd_str {
-    //                 Ok(s) => {
-    //                     let clean_str = s.trim();
-    //                     if clean_str.starts_with("help") {
-    //                         debug!("Welcome to the process console.");
-    //                         debug!("Valid commands are: help status list stop start fault");
-    //                     } else if clean_str.starts_with("start") {
-    //                         let argument = clean_str.split_whitespace().nth(1);
-    //                         argument.map(|name| {
-    //                             self.kernel.process_each_capability(
-    //                                 &self.capability,
-    //                                 |proc| {
-    //                                     let proc_name = proc.get_process_name();
-    //                                     if proc_name == name {
-    //                                         proc.resume();
-    //                                         debug!("Process {} resumed.", name);
-    //                                     }
-    //                                 },
-    //                             );
-    //                         });
-    //
-    //                         // } else if clean_str.starts_with("stop") {
-    //                         //     let argument = clean_str.split_whitespace().nth(1);
-    //                         //     argument.map(|name| {
-    //                         //         self.kernel.process_each_capability(
-    //                         //             &self.capability,
-    //                         //             |proc| {
-    //                         //                 let proc_name = proc.get_process_name();
-    //                         //                 if proc_name == name {
-    //                         //                     proc.stop();
-    //                         //                     debug!("Process {} stopped", proc_name);
-    //                         //                 }
-    //                         //             },
-    //                         //         );
-    //                         //     });
-    //                     } else if clean_str.starts_with("fault") {
-    //                         let argument = clean_str.split_whitespace().nth(1);
-    //                         argument.map(|name| {
-    //                             self.kernel.process_each_capability(
-    //                                 &self.capability,
-    //                                 |proc| {
-    //                                     let proc_name = proc.get_process_name();
-    //                                     if proc_name == name {
-    //                                         proc.set_fault_state();
-    //                                         debug!("Process {} now faulted", proc_name);
-    //                                     }
-    //                                 },
-    //                             );
-    //                         });
-    //                     } else if clean_str.starts_with("list") {
-    //                         debug!(" PID    Name                Quanta  Syscalls  Dropped Callbacks  Restarts    State  Grants");
-    //                         self.kernel
-    //                             .process_each_capability(&self.capability, |proc| {
-    //                                 let info: KernelInfo = KernelInfo::new(self.kernel);
-    //
-    //                                 let pname = proc.get_process_name();
-    //                                 let appid = proc.appid();
-    //                                 let (grants_used, grants_total) = info.number_app_grant_uses(appid, &self.capability);
-    //
-    //                                 debug!(
-    //                                     "  {:?}\t{:<20}{:6}{:10}{:19}{:10}  {:?}{:5}/{}",
-    //                                     appid,
-    //                                     pname,
-    //                                     proc.debug_timeslice_expiration_count(),
-    //                                     proc.debug_syscall_count(),
-    //                                     proc.debug_dropped_callback_count(),
-    //                                     proc.get_restart_count(),
-    //                                     proc.get_state(),
-    //                                     grants_used,
-    //                                     grants_total
-    //                                 );
-    //                             });
-    //                     } else if clean_str.starts_with("status") {
-    //                         let info: KernelInfo = KernelInfo::new(self.kernel);
-    //                         debug!(
-    //                             "Total processes: {}",
-    //                             info.number_loaded_processes(&self.capability)
-    //                         );
-    //                         debug!(
-    //                             "Active processes: {}",
-    //                             info.number_active_processes(&self.capability)
-    //                         );
-    //                         debug!(
-    //                             "Timeslice expirations: {}",
-    //                             info.timeslice_expirations(&self.capability)
-    //                         );
-    //                     } else if clean_str.starts_with("Unstart") {
-    //                         let argument = clean_str.split_whitespace().nth(1);
-    //                         argument.map(|name| {
-    //                             //let manager=VppProcessManager::new();
-    //                             self.kernel.process_each_capability(
-    //                                 &self.capability,
-    //                                 |proc| {
-    //                                     let proc_name = proc.get_process_name();
-    //                                     if proc_name == name {
-    //                                         proc.set_state(State::Unstarted);
-    //                                         // let handle= MK_HANDLE_t{ process: proc };
-    //                                         // manager._mk_suspend_process(handle);
-    //
-    //                                         debug!("Process {} Unstarted", proc_name);
-    //                                     }
-    //                                 },
-    //                             );
-    //                         });
-    //                     } else if clean_str.starts_with("test") {
-    //                         let argument = clean_str.split_whitespace().nth(1);
-    //                         argument.map(|name| {
-    //                             self.kernel.process_each_capability(
-    //                                 &self.capability,
-    //                                 |proc| {
-    //                                     let proc_name = proc.get_process_name();
-    //                                     if proc_name == name {
-    //                                         //proc.set_state(State::Unstarted);
-    //                                         // let handle= MK_HANDLE_t{ process: proc };
-    //                                         // manager._mk_suspend_process(handle);
-    //                                         self._mk_suspend_process(proc);
-    //                                         debug!("Process {} Suspended", proc_name);
-    //                                     }
-    //                                 },
-    //                             );
-    //                         });
-    //                     } else {
-    //                         debug!("Valid commands are: help status list stop start fault");
-    //                     }
-    //                 }
-    //                 Err(_e) => debug!("Invalid command: {:?}", command),
-    //             }
-    //         }
-    //     });
-    //     self.command_buffer.map(|command| {
-    //         command[0] = 0;
-    //     });
-    //     self.command_index.set(0);
-    // }
+
 }

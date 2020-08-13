@@ -37,6 +37,7 @@ type v32_u = u32 ;
 /// Enumerated Signal type
 
 /// Handle to a Kernel Object
+type  MK_HANDLE_t = u32;
 // pub struct VppProcess{
 // process: &dyn ProcessType,
 // VPPstate: VPPSTATE,

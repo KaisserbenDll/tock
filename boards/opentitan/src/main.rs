@@ -26,11 +26,14 @@ mod aes_test;
 
 pub mod io;
 pub mod usb;
+
+// Number of allowed process
+const NUM_PROCS: usize =4;
 //
 // Actual memory for holding the active process structures. Need an empty list
 // at least.
-static mut PROCESSES: [Option<&'static dyn kernel::procs::ProcessType>; 4] =
-    [None, None, None, None];
+static mut PROCESSES: [Option<&'static dyn kernel::procs::ProcessType>; NUM_PROCS] =
+    [None;NUM_PROCS];
 
 static mut CHIP: Option<
     &'static earlgrey::chip::EarlGrey<VirtualMuxAlarm<'static, earlgrey::timer::RvTimer>>,
@@ -136,7 +139,7 @@ pub unsafe fn reset_handler() {
     let console = components::console::ConsoleComponent::new(board_kernel, uart_mux).finalize(());
     let process_console =
         components::process_console::ProcessConsoleComponent::new(board_kernel, uart_mux)
-            .finalize(());
+         .finalize(());
     // Create the debugger object that handles calls to `debug!()`.
     components::debug_writer::DebugWriterComponent::new(uart_mux).finalize(());
 
