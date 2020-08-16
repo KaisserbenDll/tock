@@ -56,6 +56,7 @@ pub mod pca9544a;
 pub mod pm_vpp;
 //pub mod process_console_vpp;
 pub mod process_console;
+pub mod process_vpp;
 pub mod rf233;
 pub mod rf233_const;
 pub mod rng;
