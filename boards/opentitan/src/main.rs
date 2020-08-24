@@ -139,7 +139,11 @@ pub unsafe fn reset_handler() {
     let console = components::console::ConsoleComponent::new(board_kernel, uart_mux).finalize(());
     let process_console =
         components::process_console::ProcessConsoleComponent::new(board_kernel, uart_mux)
-         .finalize(());
+        .finalize(());
+    // let vpp_process_console =
+    //     components::process_console_vpp::ProcessConsoleComponent::new(board_kernel, uart_mux)
+    //         .finalize(());
+
     // Create the debugger object that handles calls to `debug!()`.
     components::debug_writer::DebugWriterComponent::new(uart_mux).finalize(());
 
@@ -277,6 +281,7 @@ pub unsafe fn reset_handler() {
     earlgrey::i2c::I2C.set_master_client(i2c_master);
 
     process_console.start();
+    // vpp_process_console.start();
     debug!("OpenTitan initialisation complete. Entering main loop");
 
     /// These symbols are defined in the linker script.

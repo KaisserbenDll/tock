@@ -1,6 +1,5 @@
-
 #![feature(const_fn)]
-#![forbid(unsafe_code)]
+//#![forbid(unsafe_code)]
 #![no_std]
 
 pub mod test;
@@ -44,7 +43,6 @@ pub mod lsm303dlhc;
 pub mod ltc294x;
 pub mod max17205;
 pub mod mcp230xx;
-pub mod mloi;
 pub mod mlx90614;
 pub mod mx25r6435f;
 pub mod ninedof;
@@ -53,10 +51,7 @@ pub mod nonvolatile_to_pages;
 pub mod nrf51822_serialization;
 pub mod panic_button;
 pub mod pca9544a;
-pub mod pm_vpp;
-//pub mod process_console_vpp;
 pub mod process_console;
-pub mod process_vpp;
 pub mod rf233;
 pub mod rf233_const;
 pub mod rng;
@@ -78,3 +73,5 @@ pub mod virtual_i2c;
 pub mod virtual_pwm;
 pub mod virtual_spi;
 pub mod virtual_uart;
+pub mod vpp;
+
