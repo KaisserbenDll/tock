@@ -1,17 +1,31 @@
+#![allow(unused_imports)]
+#![allow(non_camel_case_types)]
+#![allow(dead_code)]
+
 use kernel::{debug, AppId};
 use kernel::procs::{State, ProcessType, Process};
 use crate::mloi::*;
 use core::cell::Cell;
 use crate::mloi::VppState::*;
+use crate::mloi::MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_LOW;
+
+type MK_Process_ID_u = u16 ;
+
+pub struct VppProcess {
+    pub(crate) tockprocess: Option<&'static dyn ProcessType>,
+    pub(crate) vppstate: Cell<VppState>,
+    pub(crate) vpppriority: Cell<MK_PROCESS_PRIORITY_e>,
+    pub(crate) vppid: Cell<MK_Process_ID_u>,
+}
 
 pub trait VppProcessType {
-    fn get_vpp_id(&self) -> MK_IPC_ID_u ;
+    fn get_vpp_id(&self) -> MK_Process_ID_u ;
 
     fn get_vpp_state(&self) -> VppState ;
 
     fn get_vpp_priority (&self) -> MK_PROCESS_PRIORITY_e;
 
-    fn set_vpp_priority(&self, MK_PROCESS_PRIORITY_e);
+    fn set_vpp_priority(&self, prio: MK_PROCESS_PRIORITY_e);
 
     fn suspend_vpp_process(&self) ;
 
@@ -22,15 +36,11 @@ pub trait VppProcessType {
     fn get_tock_process_ref(&self) -> &dyn ProcessType;
 }
 
-pub struct VppProcess<'a> {
-    pub(crate) tockprocess: &'static dyn ProcessType,
-    pub(crate) vppstate: Cell<VppState>,
-    pub(crate) vpppriority: Cell<MK_PROCESS_PRIORITY_e>,
-    pub(crate) vppid: Cell<MK_IPC_ID_u>,
-}
 
-impl VppProcessType for VppProcess<'_> {
-    fn get_vpp_id(&self) -> MK_IPC_ID_u {
+
+impl VppProcessType for VppProcess {
+
+    fn get_vpp_id(&self) -> MK_Process_ID_u {
         self.vppid.get()
     }
 
@@ -80,4 +90,26 @@ impl VppProcessType for VppProcess<'_> {
 }
 
 
+// impl VppProcess {
+//     pub(crate) unsafe fn create_vpp_process(tockprocess:Option<&'static dyn ProcessType>)
+//         -> Option<&'static dyn VppProcessType> {
+//         Some(&VppProcess{
+//             tockprocess: tockprocess,
+//             vppstate: Cell::new(READY),
+//             vpppriority: Cell::new(MK_PROCESS_PRIORITY_LOW),
+//             vppid: Cell::new(1),
+//         })
+//     }
+// }
 
+impl VppProcess {
+    pub(crate) fn create_vpp_process(tockprocess: Option<&'static dyn ProcessType>)
+                                     -> VppProcess {
+        VppProcess{
+            tockprocess: tockprocess,
+            vppstate: Cell::new(READY),
+            vpppriority: Cell::new(MK_PROCESS_PRIORITY_LOW),
+            vppid: Cell::new(1),
+        }
+    }
+}

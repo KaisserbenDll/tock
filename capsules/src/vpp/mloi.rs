@@ -8,7 +8,8 @@
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 #![allow(non_snake_case)]
-use alloc::boxed::Box;
+//extern crate alloc;
+//use alloc::boxed::Box;
 //the 8-bit, 16-bit, 32-bit and 64-bit unsigned types are already defined as
 // u8, u16, u32, u64 respectively. No need to re-define them.
 
@@ -90,40 +91,41 @@ impl MK_EXECUTION_DOMAIN_TYPE_e {
 /// ```
 /// more Documentaion : https://docs.rs/modular-bitfield/0.6.0/modular_bitfield/#modules
 
-trait Kernel_Object_Type <T>{
-    fn new(id_e: T, exec_domain: MK_EXECUTION_DOMAIN_TYPE_e) -> Box<Self> {
-        id_e & (MK_EXECUTION_DOMAIN_TYPE_e::value(&exec_domain)<<14)
-    }
-    fn get_id (&self) -> T {
-        0b0011_1111_1111_1111_u16 & self
-    }
-    fn get_exdomain (&self) -> MK_EXECUTION_DOMAIN_TYPE_e {
-        MK_EXECUTION_DOMAIN_TYPE_e::convert(self >>14).unwrap()
-    }
-    fn set_id (&self ,id_e: T) -> Box<Self> {
-        (  self & 0xC000_u16)  | id_e
-    }
-    fn set_exdomain (&self , exec_domain: MK_EXECUTION_DOMAIN_TYPE_e) -> Box<Self> {
-        (self & 0x3FFF_u16 )| MK_EXECUTION_DOMAIN_TYPE_e::value(&exec_domain)
-    }
-}
+// trait Kernel_Object_Type <T>{
+//     fn new(id_e: T, exec_domain: MK_EXECUTION_DOMAIN_TYPE_e) -> Box<Self> {
+//         id_e & (MK_EXECUTION_DOMAIN_TYPE_e::value(&exec_domain)<<14)
+//     }
+//     fn get_id (&self) -> T {
+//         0b0011_1111_1111_1111_u16 & self
+//     }
+//     fn get_exdomain (&self) -> MK_EXECUTION_DOMAIN_TYPE_e {
+//         MK_EXECUTION_DOMAIN_TYPE_e::convert(self >>14).unwrap()
+//     }
+//     fn set_id (&self ,id_e: T) -> Box<Self> {
+//         (  self & 0xC000_u16)  | id_e
+//     }
+//     fn set_exdomain (&self , exec_domain: MK_EXECUTION_DOMAIN_TYPE_e) -> Box<Self> {
+//         (self & 0x3FFF_u16 )| MK_EXECUTION_DOMAIN_TYPE_e::value(&exec_domain)
+//     }
+// }
 
 /// Composite Identifier of an IPC (Table 7-2)
 pub type MK_IPC_ID_u = u16;
 pub type MK_IPC_ID_e = u16;
 
-impl Kernel_Object_Type<MK_IPC_ID_e> for MK_IPC_ID_u {}
+//impl Kernel_Object_Type<MK_IPC_ID_e> for MK_IPC_ID_u {}
 
 /// Composite Identifier of a Mailbox (Table 7-2)
 pub type MK_MAILBOX_ID_u = u16 ;
 pub type MK_MAILBOX_ID_e = u16 ;
-impl Kernel_Object_Type<MK_MAILBOX_ID_e> for MK_MAILBOX_ID_u {}
+//impl Kernel_Object_Type<MK_MAILBOX_ID_e> for MK_MAILBOX_ID_u {}
 
 /// Composite Identifier of a Process (Table 7-2)
 pub type MK_PROCESS_ID_u= u16 ;
 pub type MK_PROCESS_ID_e= u16 ;
-impl Kernel_Object_Type<MK_PROCESS_ID_e> for MK_PROCESS_ID_u {}
+//impl Kernel_Object_Type<MK_PROCESS_ID_e> for MK_PROCESS_ID_u {}
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 
 /// Priority Values of a Process (Table 7-4)
 pub enum MK_PROCESS_PRIORITY_e{
@@ -150,7 +152,7 @@ impl From<MK_PROCESS_PRIORITY_e> for u16 {
 /// Composite Identifier of a shared library (Table 7-2)
 pub type MK_LIB_ID_u = u16 ;
 pub type MK_LIB_ID_e = u16 ;
-impl Kernel_Object_Type<MK_LIB_ID_e> for MK_LIB_ID_u {}
+//impl Kernel_Object_Type<MK_LIB_ID_e> for MK_LIB_ID_u {}
 
 /// VRE Identifiers (Table 7-5)
 pub enum MK_VRE_e{
@@ -202,6 +204,7 @@ type UUID_t = u128;
 type v32_u = u32 ;
 
 /// Errors (Table 7-12)
+#[derive(Clone, Copy)]
 pub enum MK_ERROR_e {
     /// No error
     MK_ERROR_NONE,
@@ -365,6 +368,7 @@ pub type  MK_HANDLE_t = u32;
 /// Time unsigned 64-bit integer
 type MK_TIME_t = u64;
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 /// VPP States
 pub enum VppState {
     READY,
@@ -457,7 +461,7 @@ const MK_MIN_APP_PROCESSS : u8 = 1 ;
 
 /// Minimal size in bytes of Memory Partition in [VFF]
 /// supported by the Primary Platform
-const MK_MIN_SUPPORTED_MEMORY_PARTITION_SIZE : u16 = 8_000_000 ; // 8MB
+//const MK_MIN_SUPPORTED_MEMORY_PARTITION_SIZE : u16 = 8_000_000 ; // 8MB
 
 /// Minimum size of the Virtual Memory that the MMF
 /// shall manage
@@ -485,52 +489,52 @@ const MK_MIN_SUPPORTED_STACK : u16 = 512 ; // 512 StackType_t units (2KB if 32bi
 // Cross-Execution-Domain IPCs and Mailbox descriptors are automatically
 // instantiated by the kernel. As such,they cannot be defined in by
 // Firmware. Their ID and IPC size are fixed.
-
-/// VPP COM Process Cross-Execution Domain Composite Identifier
-const MK_PROCESS_COM_VPP_ID :  Kernel_Object_Type<MK_PROCESS_ID_e>
-= Kernel_Object_Type::new(0, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP);
-
-/// MGT Process Cross-Execution Domain Composite Identifier
-const MK_PROCESS_MGT_VPP_ID : Kernel_Object_Type<MK_PROCESS_ID_e>
-= Kernel_Object_Type::new(1, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP) ;
-
-/// Main Process Cross-Execution Domain Composite Identifier
-const MK_PROCESS_APP_ID : Kernel_Object_Type<MK_PROCESS_ID_e> =
-Kernel_Object_Type::new(0, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP) ;
-
-/// Com Process Mailbox (sender: Main Process)
-const MK_MAILBOX_COM_MAIN_ID : Kernel_Object_Type<MK_MAILBOX_ID_e> =
-Kernel_Object_Type::new(0, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP) ;
-
-/// MGT Process Mailbox (sender: Main Process)
-const MK_MAILBOX_MGT_MAIN_ID : Kernel_Object_Type<MK_MAILBOX_ID_e> =
-Kernel_Object_Type::new(1, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP);
-
-/// Main Process Mailbox (sender: COM Process)
-const MK_MAILBOX_MAIN_COM_ID : Kernel_Object_Type<MK_MAILBOX_ID_e> =
-Kernel_Object_Type::new(0, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP);
-
-/// Main Process Mailbox (sender: COM Process)
-const MK_MAILBOX_MAIN_MGT_ID : Kernel_Object_Type<MK_MAILBOX_ID_e> =
-Kernel_Object_Type::new(1, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP);
-
-/// IPC from the Main Process to the COM Process
-const MK_IPC_MAIN_COM_ID : Kernel_Object_Type<MK_IPC_ID_e> =
-Kernel_Object_Type::new(0,MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP);
-
-/// IPC from the COM Process to the Main Process
-const MK_IPC_COM_MAIN_ID : Kernel_Object_Type<MK_IPC_ID_e> =
-Kernel_Object_Type::new(0,MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP);
-
-/// IPC from the Main Process to the MGT Process
-/// (for SYSTEM VPP APP)
-const MK_IPC_MAIN_MGT_ID : Kernel_Object_Type<MK_IPC_ID_e> =
-Kernel_Object_Type::new(1,MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP);
-
-/// IPC from the MGT Process to the Main Process
-///(for SYSTEM VPP APP)
-const MK_IPC_MGT_MAIN_ID : Kernel_Object_Type<MK_IPC_ID_e> =
-Kernel_Object_Type::new(1,MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP);
+//
+// /// VPP COM Process Cross-Execution Domain Composite Identifier
+// const MK_PROCESS_COM_VPP_ID : dyn Kernel_Object_Type<MK_PROCESS_ID_e>
+// = Kernel_Object_Type::new(0, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP);
+//
+// /// MGT Process Cross-Execution Domain Composite Identifier
+// const MK_PROCESS_MGT_VPP_ID : dyn Kernel_Object_Type<MK_PROCESS_ID_e>
+// = Kernel_Object_Type::new(1, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP) ;
+//
+// /// Main Process Cross-Execution Domain Composite Identifier
+// const MK_PROCESS_APP_ID :dyn  Kernel_Object_Type<MK_PROCESS_ID_e> =
+// Kernel_Object_Type::new(0, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP) ;
+//
+// /// Com Process Mailbox (sender: Main Process)
+// const MK_MAILBOX_COM_MAIN_ID : dyn Kernel_Object_Type<MK_MAILBOX_ID_e> =
+// Kernel_Object_Type::new(0, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP) ;
+//
+// /// MGT Process Mailbox (sender: Main Process)
+// const MK_MAILBOX_MGT_MAIN_ID : dyn Kernel_Object_Type<MK_MAILBOX_ID_e> =
+// Kernel_Object_Type::new(1, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP);
+//
+// /// Main Process Mailbox (sender: COM Process)
+// const MK_MAILBOX_MAIN_COM_ID : dyn Kernel_Object_Type<MK_MAILBOX_ID_e> =
+// Kernel_Object_Type::new(0, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP);
+//
+// /// Main Process Mailbox (sender: COM Process)
+// const MK_MAILBOX_MAIN_MGT_ID : dyn Kernel_Object_Type<MK_MAILBOX_ID_e> =
+// Kernel_Object_Type::new(1, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP);
+//
+// /// IPC from the Main Process to the COM Process
+// const MK_IPC_MAIN_COM_ID : dyn Kernel_Object_Type<MK_IPC_ID_e> =
+// Kernel_Object_Type::new(0,MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP);
+//
+// /// IPC from the COM Process to the Main Process
+// const MK_IPC_COM_MAIN_ID : dyn Kernel_Object_Type<MK_IPC_ID_e> =
+// Kernel_Object_Type::new(0,MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP);
+//
+// /// IPC from the Main Process to the MGT Process
+// /// (for SYSTEM VPP APP)
+// const MK_IPC_MAIN_MGT_ID : dyn Kernel_Object_Type<MK_IPC_ID_e> =
+// Kernel_Object_Type::new(1,MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP);
+//
+// /// IPC from the MGT Process to the Main Process
+// ///(for SYSTEM VPP APP)
+// const MK_IPC_MGT_MAIN_ID : dyn Kernel_Object_Type<MK_IPC_ID_e> =
+// Kernel_Object_Type::new(1,MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP);
 
 // Cross-Execution-Domain Signals (Table 7-14)
 // As a Mailbox has only a single reader and writer, Cross-Execution-Domain

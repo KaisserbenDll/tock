@@ -112,6 +112,7 @@
 //! ```
 
 #![allow(unused_imports)]
+#![allow(non_camel_case_types)]
 use core::cell::Cell;
 use core::cmp;
 use core::str;
@@ -127,6 +128,26 @@ use crate::mloi::MK_ERROR_e;
 use crate::mloi::MK_ERROR_e::{MK_ERROR_NONE, MK_ERROR_UNKNOWN_HANDLE, MK_ERROR_ACCESS_DENIED};
 use crate::mloi::*;
 use crate::mloi::MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_ERROR;
+use crate::process_vpp::*;
+use crate::process_vpp;
+use crate::mloi::MK_ERROR_e::*;
+use crate::mloi::MK_PROCESS_PRIORITY_e::*;
+use crate::mloi::*;
+
+use crate::process_console::ProcessConsole;
+
+/// Global Variable that retrieves the last error generated
+/// by a Process (useful for _mk_Get_Error)
+static mut LAST_ERR: MK_ERROR_e = MK_ERROR_NONE;
+
+// To chane LAST_ERR use unsafe block
+pub type MK_Process_ID_u = u16 ;
+pub(crate) fn convert_to_handle(id: MK_PROCESS_ID_u) -> MK_HANDLE_t{
+    id as u32
+}
+pub(crate) fn convert_to_id(handle: MK_HANDLE_t) -> MK_PROCESS_ID_u{
+    handle as u16
+}
 
 // Since writes are character echoes, we do not need more than 4 bytes:
 // the longest write is 3 bytes for a backspace (backspace, space, backspace).
@@ -138,7 +159,7 @@ pub static mut READ_BUF: [u8; 4] = [0; 4];
 // characters, limiting arguments to 25 bytes or so seems fine for now.
 pub static mut COMMAND_BUF: [u8; 32] = [0; 32];
 
-pub struct ProcessConsole<'a, C: ProcessManagementCapability> {
+pub struct VppProcessConsole<'a, C: ProcessManagementCapability> {
     uart: &'a dyn uart::UartData<'a>,
     tx_in_progress: Cell<bool>,
     tx_buffer: TakeCell<'static, [u8]>,
@@ -155,16 +176,11 @@ pub struct ProcessConsole<'a, C: ProcessManagementCapability> {
     /// received after finishing echoing the last newline character.
     execute: Cell<bool>,
     kernel: &'static Kernel,
+    vpp_processes:  &'static [Option<&'static dyn process_vpp::VppProcessType>],
     capability: C,
 }
 
-pub struct VppProcess<'a> {
-    process: &'a mut dyn ProcessType,
-    vppstate:  VppState,
-    priority: MK_PROCESS_PRIORITY_e,
-}
-
-impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
+impl<'a, C: ProcessManagementCapability> VppProcessConsole<'a,C> {
     pub fn new(
         uart: &'a dyn uart::UartData<'a>,
         tx_buffer: &'static mut [u8],
@@ -172,8 +188,8 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
         cmd_buffer: &'static mut [u8],
         kernel: &'static Kernel,
         capability: C,
-    ) -> ProcessConsole<'a, C> {
-        ProcessConsole {
+    ) -> VppProcessConsole<'a, C> {
+        VppProcessConsole {
             uart: uart,
             tx_in_progress: Cell::new(false),
             tx_buffer: TakeCell::new(tx_buffer),
@@ -183,10 +199,78 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
             command_index: Cell::new(0),
             running: Cell::new(false),
             execute: Cell::new(false),
-            kernel: kernel,
-            capability: capability,
+            kernel,
+            vpp_processes: &[None;4], // initialized at 0
+            capability,
         }
     }
+    pub unsafe fn new_vpp_console(&self, mut pconsole:  VppProcessConsole<'a,C>)
+                                  -> VppProcessConsole<'a, C>
+    {
+        //
+        // let mut vpp_processes: [Option<&'static dyn process_vpp::VppProcessType>; 4] =
+        // [None;4] ;
+        // self.kernel.process_each_capability(
+        //     &self.capability,|tockprocess| {
+        //         for i in 0..3 {
+        //             if vpp_processes[i].is_none() {
+        //                 let vpp_proc = process_vpp::VppProcess::create_vpp_process(Option::from(tockprocess));
+        //                 vpp_processes[i] = vpp_proc ;
+        //             }
+        //         }
+        //     });
+        // pconsole.vpp_processes = &vpp_processes;
+        // return pconsole
+
+
+        let mut vpp_processes: [Option<&'static dyn process_vpp::VppProcessType>; 4] =
+            [None;4] ;
+        self.kernel.process_each_capability(
+            &self.capability,|tockprocess| {
+                for i in 0..3 {
+                    if vpp_processes[i].is_none() {
+
+                        vpp_processes[i] =  process_vpp::VppProcess::create_vpp_process(tockprocess.get_process_name()) ;
+
+                    }
+                }
+            });
+        pconsole.vpp_processes = &vpp_processes;
+        return pconsole
+
+
+        // let mut vpp_processes: [Option<dyn process_vpp::VppProcessType>; 4] =
+        // [None;4] ;
+        // self.kernel.process_each_capability(
+        //     &self.capability,
+        //     |proc| {
+        //         let proc_name = proc.get_process_name();
+        //         if proc_name == name {
+        //             proc.set_state(State::Unstarted);
+        //             debug!("Process {} Unstarted", proc_name);
+        //         }
+        //
+        //     },
+        // );
+        // pconsole.vpp_processes = &vpp_processes;
+        // return pconsole
+
+    }
+    // pub fn get_vpp_process
+
+
+    // unsafe fn create_vpp_processes (&self) -> [Option<&'static dyn VppProcessType>; 4] {
+    //
+    //     let mut vpp_processes: [Option<&'static dyn process_vpp::VppProcessType>; 4] =
+    //     [None;4] ;
+    //     self.kernel.process_each_capability(&self.capability,
+    //     |process| {
+    //         [vpp_processes,VppProcess.create(Option::from(process))].concat() ;
+    //
+    // });
+    //     vpp_processes
+    //
+    // }
 
     pub fn start(&self) -> ReturnCode {
         if self.running.get() == false {
@@ -200,57 +284,6 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
         ReturnCode::SUCCESS
     }
 
-
-    fn _mk_suspend_process(&self, mut _hProcess: VppProcess) -> MK_ERROR_e {
-        //Check if the Process Handle is valid
-        // if _hProcess.process.
-        // MK_ERROR_UNKNOWN_HANDLE
-
-        // Check if the Process is not itself or any of its descendants
-        // MK_ERROR_ACCESS_DENIED
-
-        match _hProcess.vppstate {
-            VppState::READY => _hProcess.vppstate = VppState::SUSPENDED_R,
-            VppState::RUNNING => _hProcess.vppstate = VppState::SUSPENDED_R,
-            VppState::WAITING => _hProcess.vppstate = VppState::SUSPENDED_W,
-            VppState::SYNC => _hProcess.vppstate = VppState::SUSPENDED_S,
-            _ => {}
-        }
-        let proc_name = _hProcess.process.get_process_name();
-        _hProcess.process.stop();
-        debug!("Process {} Suspended", proc_name);
-
-        // self.kernel.process_each_capability(
-        //         &self.capability,
-        //         |_hProcess| {
-        //             let proc_name = _hProcess.get_process_name();
-        //             _hProcess.tock_pointer.stop();
-        //             debug!("Process {} Suspended", proc_name);
-        //         }
-        //  );
-        MK_ERROR_e::MK_ERROR_NONE
-    }
-
-    fn _mk_resume_process(&self, mut _hProcess: VppProcess) -> MK_ERROR_e {
-        //Check if the Process Handle is valid
-        // if _hProcess.process.
-        // MK_ERROR_UNKNOWN_HANDLE
-
-        // Check if the Process is not itself or any of its descendants
-        // MK_ERROR_ACCESS_DENIED
-
-        match _hProcess.vppstate {
-            VppState::SUSPENDED_R => _hProcess.vppstate = VppState::READY,
-            VppState::SUSPENDED_W => _hProcess.vppstate = VppState::WAITING,
-            VppState::SUSPENDED_S => _hProcess.vppstate = VppState::SYNC,
-            _ => {},
-        }
-        let proc_name = _hProcess.process.get_process_name();
-        _hProcess.process.resume();
-        debug!("Process {} Resumed", proc_name);
-
-        MK_ERROR_e::MK_ERROR_NONE
-    }
     // Process the command in the command buffer and clear the buffer.
     fn read_command(&self) {
         self.command_buffer.map(|command| {
@@ -290,7 +323,8 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
                                 );
                             });
 
-                        } else if clean_str.starts_with("stop") {
+                        }
+                        else if clean_str.starts_with("stop") {
                             let argument = clean_str.split_whitespace().nth(1);
                             argument.map(|name| {
                                 self.kernel.process_each_capability(
@@ -377,24 +411,32 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
                         }
                         // else if clean_str.starts_with("test") {
                         //     let argument = clean_str.split_whitespace().nth(1);
-                        //     argument.map(|name| {
-                        //         self.kernel.process_each_capability(
-                        //             &self.capability,
-                        //             |proc| {
-                        //                 let proc_name = proc.get_process_name();
-                        //                 if proc_name == name {
-                        //                     //proc.set_state(State::Unstarted);
-                        //                     // let handle= MK_HANDLE_t{ process: proc };
-                        //                     // manager._mk_suspend_process(handle);
-                        //                     self._mk_suspend_process(proc);
-                        //                     debug!("Process {} Suspended", proc_name);
-                        //                 }
-                        //
-                        //             },
-                        //         );
-                        //     });
+                        //     argument.map(|name|{
+                        //         self.get_process_ref_interal(argument.);
                         //
                         //
+                        //
+                        //     }
+                        //
+                        //     );
+                        //     // argument.map(|name| {
+                        //     //     self.kernel.process_each_capability(
+                        //     //         &self.capability,
+                        //     //         |proc| {
+                        //     //             let proc_name = proc.get_process_name();
+                        //     //             if proc_name == name {
+                        //     //                 //proc.set_state(State::Unstarted);
+                        //     //                 // let handle= MK_HANDLE_t{ process: proc };
+                        //     //                 // manager._mk_suspend_process(handle);
+                        //     //                 self._mk_suspend_process(proc);
+                        //     //                 debug!("Process {} Suspended", proc_name);
+                        //     //             }
+                        //     //
+                        //     //         },
+                        //     //     );
+                        //     // });
+                        //
+                        // debug!("Tested {:?}", command) ;
                         //
                         // }
                         else {
@@ -409,6 +451,29 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
             command[0] = 0;
         });
         self.command_index.set(0);
+    }
+
+    unsafe fn get_process_ref_interal(&self, handle: MK_HANDLE_t) -> (MK_ERROR_e,Option< &dyn VppProcessType> ){
+        let mut result = None;
+        let mut error :MK_ERROR_e = MK_ERROR_NONE;
+        self.vpp_processes.iter().find_map(|p: &Option <&dyn VppProcessType> | {
+            p.map_or(None,|process : &dyn VppProcessType| -> Option<&dyn VppProcessType>{
+                let id = convert_to_id(handle);
+                let mut error = MK_ERROR_NONE;
+                if process.get_vpp_state() == VppState::DEAD {
+                    error = MK_ERROR_UNKNOWN_ID ;
+                }
+                if process.get_vpp_id() == id {
+                    result = Some(process);
+                } else {
+                    error= MK_ERROR_UNKNOWN_ID;
+                }
+                unsafe { LAST_ERR = error ;}
+                None
+            })
+
+        });
+        (error,result)
     }
 
     fn write_byte(&self, byte: u8) -> ReturnCode {
@@ -440,7 +505,7 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
     }
 }
 
-impl<'a, C: ProcessManagementCapability> uart::TransmitClient for ProcessConsole<'a, C> {
+impl<'a, C: ProcessManagementCapability> uart::TransmitClient for VppProcessConsole<'a, C> {
     fn transmitted_buffer(&self, buffer: &'static mut [u8], _tx_len: usize, _rcode: ReturnCode) {
         self.tx_buffer.replace(buffer);
         self.tx_in_progress.set(false);
@@ -453,7 +518,7 @@ impl<'a, C: ProcessManagementCapability> uart::TransmitClient for ProcessConsole
         }
     }
 }
-impl<'a, C: ProcessManagementCapability> uart::ReceiveClient for ProcessConsole<'a, C> {
+impl<'a, C: ProcessManagementCapability> uart::ReceiveClient for VppProcessConsole<'a, C> {
     fn received_buffer(
         &self,
         read_buf: &'static mut [u8],
