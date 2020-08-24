@@ -12,7 +12,7 @@
 //use alloc::boxed::Box;
 //the 8-bit, 16-bit, 32-bit and 64-bit unsigned types are already defined as
 // u8, u16, u32, u64 respectively. No need to re-define them.
-
+use core::fmt;
 
 /// Firmware/Software Types (Table 7-6)
 pub enum VPP_FRW_TYPE_e {
@@ -247,6 +247,47 @@ impl From<MK_ERROR_e> for u16 {
     }
 }
 
+impl fmt::Debug for MK_ERROR_e {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MK_ERROR_e::MK_ERROR_NONE => {
+                write!(f, "No error\n")
+            }
+            MK_ERROR_e::MK_ERROR_UNKNOWN_ID => {
+                write!(f, "Unknown ID\n")
+            }
+            _ => write!(f, "FUCK\n")
+            /*
+
+                /// No error
+    MK_ERROR_NONE,
+    /// Unknown UUID
+    MK_ERROR_UNKNOWN_UUID,
+    /// Severe error
+    MK_ERROR_SEVERE,
+    /// Illegal Parameter
+    MK_ERROR_ILLEGAL_PARAMETER,
+    /// Uknown identifier
+    MK_ERROR_UNKNOWN_ID,
+    /// Unknown Handle
+    MK_ERROR_UNKNOWN_HANDLE,
+    /// Unknown priority
+    MK_ERROR_UNKNOWN_PRIORITY,
+    /// Access denied
+    MK_ERROR_ACCESS_DENIED,
+    /// Internal Error
+    MK_ERROR_INTERNAL,
+    /// Reserved for VPP imlementation-specific
+    MK_ERROR_VENDOR_BASE,
+    /// Maximal error value
+    MK_ERROR_MAX,
+            */
+        }
+    }
+}
+
+
+
 /// Exceptions (Table 7-11)
 pub enum MK_EXCEPTION_e {
     /// An error has occured in a child of the Process
@@ -358,12 +399,20 @@ impl From<MK_SIGNAL_e> for u32 {
             MK_SIGNAL_e::MK_SIGNAL_DOMAIN_BASE_28 => 0x8000_0000_u32,
 
 
+        }
     }
-}
 }
 
 /// Handle to a Kernel Object
 pub type  MK_HANDLE_t = u32;
+
+pub(crate) fn convert_to_handle(id: MK_PROCESS_ID_u) -> MK_HANDLE_t{
+    id as u32
+}
+pub(crate) fn convert_to_id(handle: MK_HANDLE_t) -> MK_PROCESS_ID_u{
+    handle as u16
+}
+
 
 /// Time unsigned 64-bit integer
 type MK_TIME_t = u64;
