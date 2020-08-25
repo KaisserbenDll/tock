@@ -73,24 +73,6 @@ impl MK_EXECUTION_DOMAIN_TYPE_e {
 
 
 
-/// Another Implementation of a Composite Identifier of an IPC
-/// add modular-bitfield = "0.6.0" to the Cargo.toml file of the capsule directory
-/// ```rust
-///use modular_bitfield::prelude::*;
-///use capsules::mloi::MK_EXECUTION_DOMAIN_TYPE_e;
-///
-///#[bitfield]
-/// #[derive(Debug, PartialEq, Eq)]
-///pub struct MK_IPC_ID_u{
-///    MK_IPC_ID_e: B14, // Uses 14 bits
-///    #[bits = 2] // asserts at compile time that it uses 2 bits
-///    MK_EXECUTION_DOMAIN_TYPE_e: MK_EXECUTION_DOMAIN_TYPE_e,
-/// }
-///let example = MK_IPC_ID_u::new();
-///
-/// ```
-/// more Documentaion : https://docs.rs/modular-bitfield/0.6.0/modular_bitfield/#modules
-
 // trait Kernel_Object_Type <T>{
 //     fn new(id_e: T, exec_domain: MK_EXECUTION_DOMAIN_TYPE_e) -> Box<Self> {
 //         id_e & (MK_EXECUTION_DOMAIN_TYPE_e::value(&exec_domain)<<14)

@@ -976,7 +976,6 @@ impl<C: Chip> ProcessType for Process<'_, C> {
         self.restart_count.get()
     }
 
-    // End Of VPP Process Management dedicated Functions
     fn dequeue_task(&self) -> Option<Task> {
         self.tasks.map_or(None, |tasks| {
             tasks.dequeue().map(|cb| {
