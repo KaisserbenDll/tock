@@ -7,7 +7,7 @@ use crate::vpp::mloi::*;
 use core::cell::Cell;
 use kernel::procs::{State, ProcessType, Process};
 use crate::vpp::mloi::VppState::*;
-use crate::vpp::mloi::MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_LOW;
+use crate::vpp::mloi::MK_Process_ID_u;
 
 #[derive(Clone)]
 pub struct VppProcess {
@@ -18,8 +18,16 @@ pub struct VppProcess {
 }
 
 impl  VppProcess{
-
-    pub(crate) fn create_vpp_process() -> VppProcess{
+    pub fn create_vpp_process(tockprocess: Option<&'static dyn ProcessType>)
+        -> VppProcess{
+        VppProcess {
+            tockprocess: tockprocess,
+            vppstate: Cell::new(VppState::READY),
+            vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_LOW),
+            vppid: Cell::new(0)
+        }
+    }
+    pub fn create_null_process() -> VppProcess{
         VppProcess {
             tockprocess: None,
             vppstate: Cell::new(VppState::READY),

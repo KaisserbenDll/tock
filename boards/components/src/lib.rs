@@ -27,7 +27,7 @@ pub mod nonvolatile_storage;
 pub mod nrf51822;
 pub mod panic_button;
 pub mod process_console;
-//pub mod process_console_vpp;
+pub mod process_console_vpp;
 pub mod rng;
 pub mod sched;
 pub mod screen;

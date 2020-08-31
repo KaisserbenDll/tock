@@ -103,12 +103,11 @@ pub type MK_MAILBOX_ID_e = u16 ;
 //impl Kernel_Object_Type<MK_MAILBOX_ID_e> for MK_MAILBOX_ID_u {}
 
 /// Composite Identifier of a Process (Table 7-2)
-pub type MK_PROCESS_ID_u= u16 ;
-pub type MK_PROCESS_ID_e= u16 ;
+pub type MK_Process_ID_u= u16 ;
+pub type MK_Process_ID_e= u16 ;
 //impl Kernel_Object_Type<MK_PROCESS_ID_e> for MK_PROCESS_ID_u {}
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-
+#[derive(Copy, Clone, Eq, PartialEq)]
 /// Priority Values of a Process (Table 7-4)
 pub enum MK_PROCESS_PRIORITY_e{
     /// Lowest Priority
@@ -127,6 +126,26 @@ impl From<MK_PROCESS_PRIORITY_e> for u16 {
             MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_NORMAL => 0x0004,
             MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_HIGH => 0x0008,
             MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_ERROR => 0xFFFF,
+        }
+    }
+}
+impl fmt::Debug for MK_PROCESS_PRIORITY_e {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_LOW => {
+                write!(f, "Priority Low\n")
+            }
+            MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_NORMAL => {
+                write!(f, "Priority Normal\n")
+            }
+            MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_HIGH => {
+                write!(f, "Priority High\n")
+            }
+            MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_ERROR => {
+                write!(f, "Error Priority\n")
+            }
+
+
         }
     }
 }
@@ -388,10 +407,10 @@ impl From<MK_SIGNAL_e> for u32 {
 /// Handle to a Kernel Object
 pub type  MK_HANDLE_t = u32;
 
-pub(crate) fn convert_to_handle(id: MK_PROCESS_ID_u) -> MK_HANDLE_t{
+pub(crate) fn convert_to_handle(id: MK_Process_ID_u) -> MK_HANDLE_t{
     id as u32
 }
-pub(crate) fn convert_to_id(handle: MK_HANDLE_t) -> MK_PROCESS_ID_u{
+pub(crate) fn convert_to_id(handle: MK_HANDLE_t) -> MK_Process_ID_u{
     handle as u16
 }
 
@@ -399,7 +418,7 @@ pub(crate) fn convert_to_id(handle: MK_HANDLE_t) -> MK_PROCESS_ID_u{
 /// Time unsigned 64-bit integer
 type MK_TIME_t = u64;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 /// VPP States
 pub enum VppState {
     READY,
@@ -411,6 +430,40 @@ pub enum VppState {
     SUSPENDED_S,
     DEAD,
     ANY_STATE,
+}
+impl fmt::Debug for VppState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            VppState::READY => {
+                write!(f, "Ready\n")
+            }
+            VppState::RUNNING => {
+                write!(f, "Running\n")
+            }
+            VppState::SUSPENDED_R => {
+                write!(f, "Suspended Ready\n")
+            }
+            VppState::WAITING => {
+                write!(f, "Waiting\n")
+            }
+            VppState::SUSPENDED_W  => {
+                write!(f, "Suspended Waiting\n")
+            }
+            VppState::SYNC => {
+                write!(f, "Sync\n")
+            }
+            VppState::SUSPENDED_S => {
+                write!(f, "Suspended Sync\n")
+            }
+            VppState::DEAD => {
+                write!(f, "Dead\n")
+            }
+            VppState::ANY_STATE => {
+                write!(f, "ANY_STATE\n")
+            }
+
+        }
+    }
 }
 
 

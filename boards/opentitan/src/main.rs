@@ -20,7 +20,7 @@ use kernel::Chip;
 use kernel::Platform;
 use kernel::{create_capability, debug, static_init};
 use rv32i::csr;
-
+//use capsules::vpp::*;
 #[allow(dead_code)]
 mod aes_test;
 
@@ -137,12 +137,9 @@ pub unsafe fn reset_handler() {
     uart_mux.initialize();
     // Setup the console.
     let console = components::console::ConsoleComponent::new(board_kernel, uart_mux).finalize(());
-    let process_console =
-        components::process_console::ProcessConsoleComponent::new(board_kernel, uart_mux)
-        .finalize(());
-    // let vpp_process_console =
-    //     components::process_console_vpp::ProcessConsoleComponent::new(board_kernel, uart_mux)
-    //         .finalize(());
+    //let process_console =
+    //    components::process_console::ProcessConsoleComponent::new(board_kernel, uart_mux)
+     //   .finalize(());
 
     // Create the debugger object that handles calls to `debug!()`.
     components::debug_writer::DebugWriterComponent::new(uart_mux).finalize(());
@@ -280,8 +277,9 @@ pub unsafe fn reset_handler() {
 
     earlgrey::i2c::I2C.set_master_client(i2c_master);
 
-    process_console.start();
-    // vpp_process_console.start();
+
+    //process_console.start();
+    //vpp_process_console.start();
     debug!("OpenTitan initialisation complete. Entering main loop");
 
     /// These symbols are defined in the linker script.
@@ -327,6 +325,10 @@ pub unsafe fn reset_handler() {
         debug!("{:?}", err);
     });
 
+    let  vpp_process_console=
+        components::process_console_vpp::ProcessConsoleComponent::new(board_kernel,uart_mux)
+            .finalize(());
+    vpp_process_console.start();
     let scheduler = components::sched::priority::PriorityComponent::new(board_kernel).finalize(());
     board_kernel.kernel_loop(&opentitan, chip, None, scheduler, &main_loop_cap);
 }

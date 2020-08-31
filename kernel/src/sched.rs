@@ -125,7 +125,7 @@ pub struct Kernel {
     work: Cell<usize>,
 
     /// This holds a pointer to the static array of Process pointers.
-    processes: &'static [Option<&'static dyn process::ProcessType>],
+    pub processes: &'static [Option<&'static dyn process::ProcessType>],
 
     /// A counter which keeps track of how many process identifiers have been
     /// created. This is used to create new unique identifiers for processes.
