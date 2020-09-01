@@ -298,44 +298,6 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
                                 info.timeslice_expirations(&self.capability)
                             );
                         }
-                        else if clean_str.starts_with("Unstart") {
-                            let argument = clean_str.split_whitespace().nth(1);
-                            argument.map(|name| {
-                                self.kernel.process_each_capability(
-                                    &self.capability,
-                                    |proc| {
-                                        let proc_name = proc.get_process_name();
-                                        if proc_name == name {
-                                            proc.set_state(State::Unstarted);
-                                            debug!("Process {} Unstarted", proc_name);
-                                        }
-
-                                    },
-                                );
-                            });
-                        }
-                        // else if clean_str.starts_with("test") {
-                        //     let argument = clean_str.split_whitespace().nth(1);
-                        //     argument.map(|name| {
-                        //         self.kernel.process_each_capability(
-                        //             &self.capability,
-                        //             |proc| {
-                        //                 let proc_name = proc.get_process_name();
-                        //                 if proc_name == name {
-                        //                     //proc.set_state(State::Unstarted);
-                        //                     // let handle= MK_HANDLE_t{ process: proc };
-                        //                     // manager._mk_suspend_process(handle);
-                        //                     self._mk_suspend_process(proc);
-                        //                     debug!("Process {} Suspended", proc_name);
-                        //                 }
-                        //
-                        //             },
-                        //         );
-                        //     });
-                        //
-                        //
-                        //
-                        // }
                         else {
                             debug!("Valid commands are: help status list stop start fault");
                         }

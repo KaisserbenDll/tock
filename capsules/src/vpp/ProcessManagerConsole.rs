@@ -13,8 +13,8 @@ use core::str;
 use crate::vpp::mloi::MK_ERROR_e::*;
 use crate::vpp::mloi::MK_PROCESS_PRIORITY_e::*;
 use crate::vpp::mloi::*;
-use crate::vpp::vppprocess_v2::*;
-use crate::vpp::vppprocess_v2;
+use crate::vpp::process::*;
+use crate::vpp::process;
 use kernel::Kernel;
 use kernel::introspection::KernelInfo;
 use kernel::common::cells::TakeCell;
@@ -23,6 +23,7 @@ use kernel::capabilities::ProcessManagementCapability;
 use kernel::debug;
 use kernel::hil::uart;
 use kernel::ReturnCode;
+use crate::vpp::process::VppProcess;
 
 // Since writes are character echoes, we do not need more than 4 bytes:
 // the longest write is 3 bytes for a backspace (backspace, space, backspace).
@@ -49,7 +50,6 @@ pub struct VppProcessManager <'a,C: ProcessManagementCapability>{
     /// received after finishing echoing the last newline character.
     execute: Cell<bool>,
 
-    // vpp_processes: &'static [VppProcess],
     vpp_processes: [VppProcess;4],
     kernel: &'static Kernel,
     capability: C,
@@ -72,9 +72,9 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a,C> {
         // let mut vppprocesses = [VppProcess::create_null_process();4];
         let mut vppprocesses = [VppProcess::create_null_process(),VppProcess::create_null_process()
          ,VppProcess::create_null_process(),VppProcess::create_null_process()];
-        debug!("Length is {}",tockprocesses.len());
+        //debug!("Length is {}",tockprocesses.len());
         for i in 0..tockprocesses.len() {
-            let proc = vppprocess_v2::VppProcess::create_vpp_process(tockprocesses[i]);
+            let proc = process::VppProcess::create_vpp_process(tockprocesses[i]);
             vppprocesses[i] = proc;
         }
         VppProcessManager {
@@ -93,15 +93,6 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a,C> {
             last_error: Cell::new(MK_ERROR_NONE)
         }
     }
-    // pub  fn init_vpp_processes(&mut self, tockprocesses: &'static [Option<&'static dyn ProcessType>],
-    //                            vppprocesses: &'static mut [VppProcess]){
-    //     for i in 0..tockprocesses.len() {
-    //         let proc = vppprocess_v2::VppProcess::create_vpp_process(tockprocesses[i]);
-    //         vppprocesses[i] = proc ;
-    //     }
-    //     self.vpp_processes = vppprocesses;
-    // }
-
     // UART dedicated
     pub fn start(&self) -> ReturnCode {
         if self.running.get() == false {
@@ -177,29 +168,28 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a,C> {
                                 info.timeslice_expirations(&self.capability)
                             );
                         }
+                         // else if clean_str.starts_with("test") {
+                         // let argument = clean_str.split_whitespace().nth(1);
+                         //   if argument.is_some(){
+                         //       if argument.unwrap() == self.vpp_processes[0].tockprocess.unwrap().get_process_name() {
+                         //           debug!("Process {} Tested", argument.unwrap());
+                         //       }else {
+                         //           debug!("Name of Process non existant");
+                         //       }
+                         //   } else  {
+                         //       debug!("No Process");
+                         //   }
+                         // }
                          else if clean_str.starts_with("test") {
-                         let argument = clean_str.split_whitespace().nth(1);
-                           if argument.is_some(){
-                               if argument.unwrap() == self.vpp_processes[0].tockprocess.unwrap().get_process_name() {
-                                   debug!("Process {} Tested", argument.unwrap());
-                               }else {
-                                   debug!("Name of Process non existant");
-                               }
-                           } else  {
-                               debug!("No Process");
-                           }
-                         }
-                         else if clean_str.starts_with("prio") {
                              let argument = clean_str.split_whitespace().nth(1);
                              if argument.is_some(){
                                  if argument.unwrap() == self.vpp_processes[0].tockprocess.unwrap().get_process_name() {
-                                     let handle=self._mk_get_process_handle(1);
-                                     debug!("Handle {:} Tested", handle);
-                                     self._mk_set_process_priority(handle,MK_PROCESS_PRIORITY_LOW);
-                                     debug!("Priority {:} Tested", handle);
+                                     let handle=self._mk_get_process_handle(5);
                                      self._mk_Get_Error();
                                      self._mk_suspend_process(handle);
-                                     self._mk_get_process_priority(handle);
+                                      self._mk_get_process_priority(handle);
+                                      self._mk_set_process_priority(handle,MK_PROCESS_PRIORITY_LOW);
+                                      self._mk_resume_process(handle);
 
                                  }else {
                                      debug!("Name of Process non existant");
@@ -289,6 +279,9 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a,C> {
         let handle = convert_to_handle(_eProcess_ID);
         let process =self.get_process_ref_interal(handle);
         if process.is_some() {handle}  else { 0}
+        // there is a problem when returning 0 as a handle. This might be in fact
+        // the id of another handle. Whether, a Process ID as 0 is not allowed
+        // or wrap this with an Option.
     }
 
     // Concerning Priorities there is another missing function that needs to be implemented.
@@ -298,7 +291,7 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a,C> {
         let process = self.get_process_ref_interal(_hProcess);
         if process.is_some(){
             let prio = process.unwrap().get_vpp_priority();
-            debug!("Process Priority set to {:?}", prio );
+            debug!("Process Priority is {:?}", prio );
             prio
         }
         else {
@@ -320,8 +313,6 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a,C> {
          if process.is_some() {
             process.unwrap().set_vpp_priority(_xPriority);
              debug!("Process Priority set to {:?}",_xPriority );
-             debug!("Process priority is {:?}",process.unwrap().get_vpp_priority());
-
              MK_ERROR_NONE
         } else {
             MK_ERROR_UNKNOWN_HANDLE

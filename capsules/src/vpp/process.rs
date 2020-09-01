@@ -23,16 +23,16 @@ impl  VppProcess{
         VppProcess {
             tockprocess: tockprocess,
             vppstate: Cell::new(VppState::READY),
-            vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_LOW),
-            vppid: Cell::new(0)
+            vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_HIGH),
+            vppid: Cell::new(5)
         }
     }
     pub fn create_null_process() -> VppProcess{
         VppProcess {
             tockprocess: None,
             vppstate: Cell::new(VppState::READY),
-            vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_LOW),
-            vppid: Cell::new(0)
+            vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_HIGH),
+            vppid: Cell::new(5)
         }
     }
 
@@ -71,7 +71,6 @@ impl  VppProcess{
             VppState::SUSPENDED_W => self.vppstate.set(WAITING),
             VppState::SUSPENDED_S => self.vppstate.set(SYNC),
             _                     => {},
-
         }
     }
 
@@ -79,7 +78,6 @@ impl  VppProcess{
         match self.vppstate.get() {
             VppState::RUNNING => self.vppstate.set(READY),
             _                 => {},
-
         }
     }
     pub(crate) fn set_vpp_id(&self, id :MK_Process_ID_u ) {
