@@ -117,7 +117,12 @@ pub enum SchedulingDecision {
     /// and will instead restart the main loop and call `next()` again.
     TrySleep,
 }
-
+pub enum ListenerType {
+    Nothing,
+    ProcessScheduled,
+    ProcessUnscheduled,
+    ProcessYielded(AppId)
+}
 /// Main object for the kernel. Each board will need to create one.
 pub struct Kernel {
     /// How many "to-do" items exist at any given time. These include
@@ -141,6 +146,8 @@ pub struct Kernel {
     /// created and the data structures for grants have already been
     /// established.
     grants_finalized: Cell<bool>,
+    /// A listener when key events take place such as JobAdded, JobScheduled ..
+    pub listener: Cell<ListenerType>
 }
 
 /// Enum used to inform scheduler why a process stopped executing (aka why
@@ -176,6 +183,7 @@ impl Kernel {
             process_identifier_max: Cell::new(0),
             grant_counter: Cell::new(0),
             grants_finalized: Cell::new(false),
+            listener: Cell::new(ListenerType::Nothing),
         }
     }
 
@@ -184,6 +192,7 @@ impl Kernel {
     /// This is only exposed in the core kernel crate.
     pub(crate) fn increment_work(&self) {
         self.work.increment();
+
     }
 
     /// Something was scheduled for a process, so there is more work to do.
@@ -668,7 +677,7 @@ impl Kernel {
                                         debug!("[{:?}] yield", process.appid());
                                     }
                                     process.set_yielded_state();
-
+                                    self.listener.set(ListenerType::ProcessYielded(process.appid()));
                                     // There might be already enqueued callbacks
                                     continue;
                                 }
@@ -837,6 +846,7 @@ impl Kernel {
                                         ccb.argument3,
                                     );
                                 }
+
                                 process.set_process_function(ccb);
                             }
                             Task::IPC((otherapp, ipc_type)) => {

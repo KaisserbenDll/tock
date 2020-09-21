@@ -20,7 +20,7 @@ use kernel::Chip;
 use kernel::Platform;
 use kernel::{create_capability, debug, static_init};
 use rv32i::csr;
-//use capsules::vpp::*;
+
 #[allow(dead_code)]
 mod aes_test;
 
@@ -71,6 +71,8 @@ struct OpenTitan {
         capsules::usb::usbc_client::Client<'static, lowrisc::usbdev::Usb<'static>>,
     >,
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<lowrisc::i2c::I2c<'static>>,
+    pm : &'static capsules::vpp::pmsyscall::ProcessManager,
+    //pmdriver: &'static capsules::vpp::ProcessManagerConsole::VppProcessManager<'static,&'static capabilities::ProcessManagementCapability>,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -80,6 +82,8 @@ impl Platform for OpenTitan {
         F: FnOnce(Option<&dyn kernel::Driver>) -> R,
     {
         match driver_num {
+            0x90003 => f(Some(self.pm)),
+           // 0x90004 => f(Some(self.pmdriver)),
             capsules::led::DRIVER_NUM => f(Some(self.led)),
             capsules::hmac::DRIVER_NUM => f(Some(self.hmac)),
             capsules::gpio::DRIVER_NUM => f(Some(self.gpio)),
@@ -293,6 +297,9 @@ pub unsafe fn reset_handler() {
         /// End of the RAM region for app memory.
         static _eappmem: u8;
     }
+    let pm = static_init!(capsules::vpp::pmsyscall::ProcessManager,
+    capsules::vpp::pmsyscall::ProcessManager::new());
+
 
     let opentitan = OpenTitan {
         gpio: gpio,
@@ -303,6 +310,7 @@ pub unsafe fn reset_handler() {
         lldb: lldb,
         usb,
         i2c_master,
+        pm,
     };
 
     kernel::procs::load_processes(
@@ -328,7 +336,7 @@ pub unsafe fn reset_handler() {
     let  vpp_process_console=
         components::process_console_vpp::ProcessConsoleComponent::new(board_kernel,uart_mux)
             .finalize(());
-    vpp_process_console.start();
+   vpp_process_console.start();
     let scheduler = components::sched::priority::PriorityComponent::new(board_kernel).finalize(());
     board_kernel.kernel_loop(&opentitan, chip, None, scheduler, &main_loop_cap);
 }

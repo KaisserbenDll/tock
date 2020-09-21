@@ -17,6 +17,9 @@ use kernel::capabilities::ProcessManagementCapability;
 use kernel::debug;
 use crate::vpp::process;
 use crate::vpp::process::VppProcess;
+use kernel::{Callback, Driver,Grant, ReturnCode,AppId};
+
+pub const DRIVER_NUM: usize = 0x90004 ;
 
 const NUM_PROCS: usize = 4 ; // Number of allowed vpp processes.
 // This should always eqaul number of tock processes.
@@ -37,9 +40,14 @@ impl <C: ProcessManagementCapability> VppProcessManager<C> {
         let mut vppprocesses:[Option<VppProcess>;NUM_PROCS] = Default::default();
         debug!("Length is {}",tockprocesses.len());
         for i in 0..tockprocesses.len() {
-            let proc = Some(process::VppProcess::create_vpp_process(tockprocesses[i]));
+            let proc = Some(process::VppProcess::create_vpp_process(tockprocesses[i], i as MK_Process_ID_u));
             vppprocesses[i] = proc;
         }
+        // For testing purposes. Leave them like this for now.
+        vppprocesses[1] = None;
+        vppprocesses[2] = None;
+        // The array should look like this [(Some(VppProcess, ID 0)), None, None, Some(VppProcess, ID 3))]
+
         VppProcessManager {
             vpp_processes: vppprocesses,
             kernel,
@@ -58,25 +66,54 @@ impl <C: ProcessManagementCapability> VppProcessManager<C> {
         // we consider the handle as the id but in 32 bits. This will probably be changed later.
         let id = convert_to_id(handle);
 
-        self.vpp_processes.iter().find_map(|proc| {
-            if proc.as_ref().unwrap().get_vpp_id() == id {
-                // even if id found, the Process must not be in "DEAD" state
-                if proc.as_ref().unwrap().get_vpp_state() == VppState::DEAD {
-                    self.last_error.set(MK_ERROR_e::MK_ERROR_UNKNOWN_ID);
-                    None
+        for process in self.vpp_processes.iter() {
+            match process {
+                Some(proc) => {
+                    // let ret = closure(*p);
+                    // if ret != ReturnCode::FAIL {
+                    //     return ret;
+                    // }
+                            if proc.get_vpp_id() == id {
+                                // even if id found, the Process must not be in "DEAD" state
+                                return if proc.get_vpp_state() == VppState::DEAD {
+                                    self.last_error.set(MK_ERROR_e::MK_ERROR_UNKNOWN_ID);
+                                    None
+                                }
+                                // if the Process in any other state, a pointer to
+                                // that process is delivered with a success flag
+                                else {
+                                    self.last_error.set(MK_ERROR_e::MK_ERROR_NONE);
+                                    debug!("VPP Process is found");
+                                    Some(proc)
+                                }
+                            }
                 }
-                // if the Process in any other state, a pointer to
-                // that process is delivered with a success flag
-                else {
-                    self.last_error.set(MK_ERROR_e::MK_ERROR_NONE) ;
-                    proc.as_ref()
-                }
-                // if the id was not found, Unknow ID error is raised.
-            } else {
-                self.last_error.set(MK_ERROR_e::MK_ERROR_UNKNOWN_ID) ;
-                None
+
+                None => {}
             }
-        })
+        }
+        None
+
+        // self.vpp_processes.iter().find_map(|proc| {
+        //     if proc.as_ref().unwrap().get_vpp_id() == id {
+        //         // even if id found, the Process must not be in "DEAD" state
+        //         if proc.as_ref().unwrap().get_vpp_state() == VppState::DEAD {
+        //             self.last_error.set(MK_ERROR_e::MK_ERROR_UNKNOWN_ID);
+        //             None
+        //         }
+        //         // if the Process in any other state, a pointer to
+        //         // that process is delivered with a success flag
+        //         else {
+        //             self.last_error.set(MK_ERROR_e::MK_ERROR_NONE) ;
+        //             debug!("VPP Process is found");
+        //             proc.as_ref()
+        //         }
+        //         // if the id was not found, Unknow ID error is raised.
+        //     } else {
+        //         self.last_error.set(MK_ERROR_e::MK_ERROR_UNKNOWN_ID) ;
+        //         None
+        //     }
+        // })
     }
 
     pub (crate)  fn _mk_get_process_handle(& self, _eProcess_ID: MK_Process_ID_u)
@@ -156,6 +193,7 @@ impl <C: ProcessManagementCapability> VppProcessManager<C> {
             process.suspend_vpp_process();
             debug!("Vpp Process State after suspending {:?}", process.get_vpp_state());
             // Suspend Tock Process State
+
             self.kernel.process_each_capability(
                 &self.capability,
                 |proc| {
@@ -201,3 +239,26 @@ impl <C: ProcessManagementCapability> VppProcessManager<C> {
 
 }
 
+pub struct VppProcessManagerDriver;
+impl  VppProcessManagerDriver {
+    pub fn new() -> VppProcessManagerDriver {
+        VppProcessManagerDriver{
+        }
+    }
+}
+impl Driver for VppProcessManagerDriver {
+    fn command(&self,
+               command_num: usize,
+               _data: usize,
+               _data2: usize,
+               _app: AppId) -> ReturnCode {
+        match command_num {
+            0 => ReturnCode::SUCCESS,
+            1 => {debug!("Testing First Syscall");
+                ReturnCode::SUCCESS
+            },
+            _ => ReturnCode::ENOSUPPORT,
+
+        }
+    }
+}

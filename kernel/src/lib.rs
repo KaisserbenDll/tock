@@ -96,7 +96,6 @@ pub mod debug;
 pub mod hil;
 pub mod introspection;
 pub mod ipc;
-//pub mod mloi;
 pub mod syscall;
 
 mod callback;
@@ -111,6 +110,7 @@ mod returncode;
 mod sched;
 mod tbfheader;
 
+pub use crate::sched::ListenerType;
 pub use crate::callback::{AppId, Callback};
 pub use crate::driver::Driver;
 pub use crate::grant::Grant;

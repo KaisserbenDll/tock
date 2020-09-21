@@ -18,23 +18,24 @@ pub struct VppProcess {
 }
 
 impl  VppProcess{
-    pub fn create_vpp_process(tockprocess: Option<&'static dyn ProcessType>)
+    // adding id as an argument for testing purposes. The id will be extracted from the firmware.
+    pub fn create_vpp_process(tockprocess: Option<&'static dyn ProcessType>, id :MK_Process_ID_u )
         -> VppProcess{
         VppProcess {
             tockprocess: tockprocess,
             vppstate: Cell::new(VppState::READY),
             vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_HIGH),
-            vppid: Cell::new(5)
+            vppid: Cell::new(id)
         }
     }
-    pub fn create_null_process() -> VppProcess{
-        VppProcess {
-            tockprocess: None,
-            vppstate: Cell::new(VppState::READY),
-            vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_HIGH),
-            vppid: Cell::new(5)
-        }
-    }
+    // pub fn create_null_process() -> VppProcess{
+    //     VppProcess {
+    //         tockprocess: None,
+    //         vppstate: Cell::new(VppState::READY),
+    //         vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_HIGH),
+    //         vppid: Cell::new(0)
+    //     }
+    // }
 
     pub(crate)fn get_vpp_id(&self) -> MK_Process_ID_u {
         self.vppid.get()
