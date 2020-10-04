@@ -244,6 +244,21 @@ impl<'a, C: ProcessManagementCapability> ProcessConsole<'a, C> {
                                 );
                             });
                          }
+                        else if clean_str.starts_with("yield") {
+                            let argument = clean_str.split_whitespace().nth(1);
+                            argument.map(|name| {
+                                self.kernel.process_each_capability(
+                                    &self.capability,
+                                    |proc| {
+                                        let proc_name = proc.get_process_name();
+                                        if proc_name == name {
+                                            proc.set_yielded_state();
+                                            debug!("Process {} yielded", proc_name);
+                                        }
+                                    },
+                                );
+                            });
+                        }
                         else if clean_str.starts_with("fault") {
                             let argument = clean_str.split_whitespace().nth(1);
                             argument.map(|name| {

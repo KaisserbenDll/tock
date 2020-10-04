@@ -3,7 +3,7 @@ use kernel::capabilities;
 use kernel::component::Component;
 use kernel::hil;
 use kernel::static_init;
-use capsules::vpp::ProcessManagerConsole;
+use capsules::vpp::ProcessManagerConsoleCap;
 
 pub struct ProcessConsoleComponent {
     board_kernel: &'static kernel::Kernel,
@@ -27,8 +27,7 @@ unsafe impl capabilities::ProcessManagementCapability for Capability {}
 
 impl Component  for ProcessConsoleComponent {
     type StaticInput = ();
-    type Output = &'static ProcessManagerConsole::VppProcessManager<'static,Capability>;
-
+    type Output = &'static ProcessManagerConsoleCap::VppProcessManager<'static,Capability>;
 
 
     unsafe fn finalize(self, _s: Self::StaticInput) -> Self::Output
@@ -38,14 +37,14 @@ impl Component  for ProcessConsoleComponent {
         console_uart.setup();
 
         let console = static_init!(
-            ProcessManagerConsole::VppProcessManager<'static,Capability>,
-            ProcessManagerConsole::VppProcessManager::new(
+            ProcessManagerConsoleCap::VppProcessManager<'static,Capability>,
+            ProcessManagerConsoleCap::VppProcessManager::new(
                 console_uart,
-                &mut ProcessManagerConsole::WRITE_BUF,
-                &mut ProcessManagerConsole::READ_BUF,
-                &mut ProcessManagerConsole::COMMAND_BUF,
+                &mut ProcessManagerConsoleCap::WRITE_BUF,
+                &mut ProcessManagerConsoleCap::READ_BUF,
+                &mut ProcessManagerConsoleCap::COMMAND_BUF,
                 self.board_kernel,
-                Capability,
+                Capability
             )
         );
 

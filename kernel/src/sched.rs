@@ -33,6 +33,17 @@ use crate::syscall::{ContextSwitchReason, Syscall};
 /// is less than this threshold.
 pub(crate) const MIN_QUANTA_THRESHOLD_US: u32 = 500;
 
+/// A listener when key events take place such as JobAdded, JobScheduled ..
+#[derive(Clone,Copy,PartialEq)]
+pub enum ListenerType {
+    Idle,
+    ProcessScheduled,
+    ProcessUnscheduled,
+    ProcessYielded(AppId),
+    Flagged
+}
+pub const LISTENER: Cell<ListenerType> = Cell::new(ListenerType::Idle);
+
 /// Trait which any scheduler must implement.
 pub trait Scheduler<C: Chip> {
     /// Decide which process to run next.
@@ -117,12 +128,7 @@ pub enum SchedulingDecision {
     /// and will instead restart the main loop and call `next()` again.
     TrySleep,
 }
-pub enum ListenerType {
-    Nothing,
-    ProcessScheduled,
-    ProcessUnscheduled,
-    ProcessYielded(AppId)
-}
+
 /// Main object for the kernel. Each board will need to create one.
 pub struct Kernel {
     /// How many "to-do" items exist at any given time. These include
@@ -146,8 +152,7 @@ pub struct Kernel {
     /// created and the data structures for grants have already been
     /// established.
     grants_finalized: Cell<bool>,
-    /// A listener when key events take place such as JobAdded, JobScheduled ..
-    pub listener: Cell<ListenerType>
+
 }
 
 /// Enum used to inform scheduler why a process stopped executing (aka why
@@ -183,7 +188,6 @@ impl Kernel {
             process_identifier_max: Cell::new(0),
             grant_counter: Cell::new(0),
             grants_finalized: Cell::new(false),
-            listener: Cell::new(ListenerType::Nothing),
         }
     }
 
@@ -486,10 +490,12 @@ impl Kernel {
                         scheduler.execute_kernel_work(chip);
                     }
                     false => {
+                        //debug!("Rerunning");
                         // No kernel work ready, so ask scheduler for a process.
                         match scheduler.next(self) {
                             SchedulingDecision::RunProcess((appid, timeslice_us)) => {
                                 self.process_map_or((), appid, |process| {
+                                    //debug!(" Process {:?} [{:?}]",process.get_state(), appid.id());
                                     let (reason, time_executed) = self.do_process(
                                         platform,
                                         chip,
@@ -500,6 +506,7 @@ impl Kernel {
                                     );
                                     scheduler.result(reason, time_executed);
                                 });
+                                //debug!("Ended Running");
                             }
                             SchedulingDecision::TrySleep => {
                                 chip.atomic(|| {
@@ -625,6 +632,7 @@ impl Kernel {
                     scheduler_timer.disarm();
                     chip.mpu().disable_mpu();
 
+
                     // Now the process has returned back to the kernel. Check
                     // why and handle the process as appropriate.
                     match context_switch_reason {
@@ -677,7 +685,7 @@ impl Kernel {
                                         debug!("[{:?}] yield", process.appid());
                                     }
                                     process.set_yielded_state();
-                                    self.listener.set(ListenerType::ProcessYielded(process.appid()));
+                                    LISTENER.set(ListenerType::ProcessYielded(process.appid()));
                                     // There might be already enqueued callbacks
                                     continue;
                                 }

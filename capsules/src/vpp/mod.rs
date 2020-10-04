@@ -1,5 +1,9 @@
 pub mod mloi;
 pub mod process;
-pub mod ProcessManagerConsole;
 pub mod ProcessManager;
 pub mod pmsyscall;
+// with capabilities
+pub mod ProcessManagerConsoleCap;
+// without capabilities
+pub mod ProcessManagerConsole;
+pub mod sub_test;

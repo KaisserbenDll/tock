@@ -111,6 +111,7 @@ mod sched;
 mod tbfheader;
 
 pub use crate::sched::ListenerType;
+pub use crate::sched::LISTENER;
 pub use crate::callback::{AppId, Callback};
 pub use crate::driver::Driver;
 pub use crate::grant::Grant;

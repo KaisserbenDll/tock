@@ -72,7 +72,8 @@ struct OpenTitan {
     >,
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<lowrisc::i2c::I2c<'static>>,
     pm : &'static capsules::vpp::pmsyscall::ProcessManager,
-    //pmdriver: &'static capsules::vpp::ProcessManagerConsole::VppProcessManager<'static,&'static capabilities::ProcessManagementCapability>,
+     vpmdriver: &'static capsules::vpp::ProcessManagerConsoleCap::VPMDriver,
+    // testdriver: &'static capsules::vpp::SubTest::Test,
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -82,8 +83,9 @@ impl Platform for OpenTitan {
         F: FnOnce(Option<&dyn kernel::Driver>) -> R,
     {
         match driver_num {
+            // 0x9000A => f(Some(self.testdriver)),
             0x90003 => f(Some(self.pm)),
-           // 0x90004 => f(Some(self.pmdriver)),
+            0x90004 => f(Some(self.vpmdriver)),
             capsules::led::DRIVER_NUM => f(Some(self.led)),
             capsules::hmac::DRIVER_NUM => f(Some(self.hmac)),
             capsules::gpio::DRIVER_NUM => f(Some(self.gpio)),
@@ -141,9 +143,9 @@ pub unsafe fn reset_handler() {
     uart_mux.initialize();
     // Setup the console.
     let console = components::console::ConsoleComponent::new(board_kernel, uart_mux).finalize(());
-    //let process_console =
+    // let process_console =
     //    components::process_console::ProcessConsoleComponent::new(board_kernel, uart_mux)
-     //   .finalize(());
+    //    .finalize(());
 
     // Create the debugger object that handles calls to `debug!()`.
     components::debug_writer::DebugWriterComponent::new(uart_mux).finalize(());
@@ -280,9 +282,17 @@ pub unsafe fn reset_handler() {
     );
 
     earlgrey::i2c::I2C.set_master_client(i2c_master);
+    // useless Syscall Driver
+    let pm = static_init!(capsules::vpp::pmsyscall::ProcessManager,
+    capsules::vpp::pmsyscall::ProcessManager::new());
+    // Capsules to test Subscribe Syscall using grant
+
+    // let testdriver = static_init!(capsules::vpp::SubTest::Test,
+    // capsules::vpp::SubTest::Test::new(board_kernel.create_grant(&memory_allocation_cap)));
+    // testdriver.trigger_callback();
 
 
-    //process_console.start();
+    // process_console.start();
     //vpp_process_console.start();
     debug!("OpenTitan initialisation complete. Entering main loop");
 
@@ -297,21 +307,19 @@ pub unsafe fn reset_handler() {
         /// End of the RAM region for app memory.
         static _eappmem: u8;
     }
-    let pm = static_init!(capsules::vpp::pmsyscall::ProcessManager,
-    capsules::vpp::pmsyscall::ProcessManager::new());
 
 
-    let opentitan = OpenTitan {
-        gpio: gpio,
-        led: led,
-        console: console,
-        alarm: alarm,
-        hmac,
-        lldb: lldb,
-        usb,
-        i2c_master,
-        pm,
-    };
+    // let opentitan = OpenTitan {
+    //     gpio: gpio,
+    //     led: led,
+    //     console: console,
+    //     alarm: alarm,
+    //     hmac,
+    //     lldb: lldb,
+    //     usb,
+    //     i2c_master,
+    //     pm,
+    // };
 
     kernel::procs::load_processes(
         board_kernel,
@@ -332,11 +340,46 @@ pub unsafe fn reset_handler() {
         debug!("Error loading processes!");
         debug!("{:?}", err);
     });
+    // let vpp_process_console= components::vpm_no_cap::ProcessConsoleComponent::new(board_kernel,uart_mux)
+    //     .finalize(());
+    // vpp_process_console.start();
+    // let vpmdriver = static_init!(
+    // capsules::vpp::ProcessManagerConsole::VPMDriver,
+    // capsules::vpp::ProcessManagerConsole::VPMDriver::new(vpp_process_console));
 
-    let  vpp_process_console=
-        components::process_console_vpp::ProcessConsoleComponent::new(board_kernel,uart_mux)
-            .finalize(());
-   vpp_process_console.start();
+
+
+    let vpp_process_con = capsules::vpp::ProcessManagerConsoleCap::ProcessConsoleComponent::new(board_kernel,uart_mux);
+    let vpp_process_component = vpp_process_con.finalize(());
+    // vpp_process_component.start();
+
+    let vpmdriver = static_init!(
+    capsules::vpp::ProcessManagerConsoleCap::VPMDriver,
+    capsules::vpp::ProcessManagerConsoleCap::VPMDriver::new(vpp_process_component)) ;
+    vpp_process_component.start();
+
+   // Intantiating VPM console without Syscall driver using Compoenents
+   //  let vpp_process_console=
+   //      components::vpm_no_cap::ProcessConsoleComponent::new(board_kernel,uart_mux)
+   //          .finalize(());
+   // vpp_process_console.start();
+  //
+  // let vpmdriver = static_init!(capsules::vpp::ProcessManagerConsole::VPMDriver,
+  // capsules::vpp::ProcessManagerConsole::VPMDriver::new(vpp_process_console));
+
+    let opentitan = OpenTitan {
+        gpio: gpio,
+        led: led,
+        console: console,
+        alarm: alarm,
+        hmac,
+        lldb: lldb,
+        usb,
+        i2c_master,
+        pm,
+        vpmdriver,
+    };
+
     let scheduler = components::sched::priority::PriorityComponent::new(board_kernel).finalize(());
     board_kernel.kernel_loop(&opentitan, chip, None, scheduler, &main_loop_cap);
 }

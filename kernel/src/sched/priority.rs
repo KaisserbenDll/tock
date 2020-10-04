@@ -43,11 +43,17 @@ impl<C: Chip> Scheduler<C> for PrioritySched {
             let next = self
                 .kernel
                 .get_process_iter()
-                .find(|&proc| proc.ready())
+                .find(|&proc|  proc.ready())
                 .map_or(None, |proc| Some(proc.appid()));
             self.running.insert(next);
 
-            SchedulingDecision::RunProcess((next.unwrap(), None))
+            // if next.is_some() {
+            //     debug!("Ready Proc{:?}", next.unwrap().id());
+                SchedulingDecision::RunProcess((next.unwrap(), None))
+            // } else {
+            //     debug!("Bug");
+            //     SchedulingDecision::TrySleep
+            // }
         }
     }
 

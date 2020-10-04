@@ -133,16 +133,16 @@ impl fmt::Debug for MK_PROCESS_PRIORITY_e {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_LOW => {
-                write!(f, "Priority Low\n")
+                write!(f, "Low\n")
             }
             MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_NORMAL => {
-                write!(f, "Priority Normal\n")
+                write!(f, "Normal\n")
             }
             MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_HIGH => {
-                write!(f, "Priority High\n")
+                write!(f, "High\n")
             }
             MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_ERROR => {
-                write!(f, "Error Priority\n")
+                write!(f, "Priority\n")
             }
 
 
@@ -252,37 +252,38 @@ impl fmt::Debug for MK_ERROR_e {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             MK_ERROR_e::MK_ERROR_NONE => {
-                write!(f, "No error\n")
+                write!(f, "None\n")
+            }
+            MK_ERROR_e::MK_ERROR_UNKNOWN_UUID => {
+                write!(f, "Unknown UUID\n")
+            }
+            MK_ERROR_e::MK_ERROR_SEVERE => {
+                write!(f, "Severe error\n")
+            }
+            MK_ERROR_e::MK_ERROR_ILLEGAL_PARAMETER => {
+                write!(f, "Illegal Parameter\n")
             }
             MK_ERROR_e::MK_ERROR_UNKNOWN_ID => {
-                write!(f, "Unknown ID\n")
+                write!(f, "Unknown identifier\n")
             }
-            _ => write!(f, "FUCK\n")
-            /*
-
-                /// No error
-    MK_ERROR_NONE,
-    /// Unknown UUID
-    MK_ERROR_UNKNOWN_UUID,
-    /// Severe error
-    MK_ERROR_SEVERE,
-    /// Illegal Parameter
-    MK_ERROR_ILLEGAL_PARAMETER,
-    /// Uknown identifier
-    MK_ERROR_UNKNOWN_ID,
-    /// Unknown Handle
-    MK_ERROR_UNKNOWN_HANDLE,
-    /// Unknown priority
-    MK_ERROR_UNKNOWN_PRIORITY,
-    /// Access denied
-    MK_ERROR_ACCESS_DENIED,
-    /// Internal Error
-    MK_ERROR_INTERNAL,
-    /// Reserved for VPP imlementation-specific
-    MK_ERROR_VENDOR_BASE,
-    /// Maximal error value
-    MK_ERROR_MAX,
-            */
+            MK_ERROR_e::MK_ERROR_UNKNOWN_HANDLE => {
+                write!(f, "Unknown Handle\n")
+            }
+            MK_ERROR_e::MK_ERROR_UNKNOWN_PRIORITY => {
+                write!(f, "Unknown Priority\n")
+            }
+            MK_ERROR_e::MK_ERROR_ACCESS_DENIED => {
+                write!(f, "Access Denied\n")
+            }
+            MK_ERROR_e::MK_ERROR_INTERNAL => {
+                write!(f, "Internal Error\n")
+            }
+            MK_ERROR_e::MK_ERROR_VENDOR_BASE=> {
+                write!(f, "Reserved for VPP implementation specific\n")
+            }
+            MK_ERROR_e::MK_ERROR_MAX => {
+                write!(f, "Maximal Error Value\n")
+            }
         }
     }
 }
@@ -441,19 +442,19 @@ impl fmt::Debug for VppState {
                 write!(f, "Running\n")
             }
             VppState::SUSPENDED_R => {
-                write!(f, "Suspended Ready\n")
+                write!(f, "S_R\n")
             }
             VppState::WAITING => {
                 write!(f, "Waiting\n")
             }
             VppState::SUSPENDED_W  => {
-                write!(f, "Suspended Waiting\n")
+                write!(f, "S_W\n")
             }
             VppState::SYNC => {
                 write!(f, "Sync\n")
             }
             VppState::SUSPENDED_S => {
-                write!(f, "Suspended Sync\n")
+                write!(f, "S_S\n")
             }
             VppState::DEAD => {
                 write!(f, "Dead\n")
