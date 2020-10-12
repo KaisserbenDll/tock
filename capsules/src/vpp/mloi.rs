@@ -13,9 +13,12 @@
 //the 8-bit, 16-bit, 32-bit and 64-bit unsigned types are already defined as
 // u8, u16, u32, u64 respectively. No need to re-define them.
 use core::fmt;
+/// XLEN is the size memory address. It is platform dependent value and for 32-bit platforms
+/// equals 4 bytes.
+pub (crate) type XLEN = u32;
 
 /// Firmware/Software Types (Table 7-6)
-pub enum VPP_FRW_TYPE_e {
+pub  enum VPP_FRW_TYPE_e {
     /// The firmware of a VPP Application
     FIRMWARE_SOFTWARE_TYPE_APP,
     /// The Primary Platform Software excluding the LLOS Software
@@ -36,13 +39,32 @@ impl From<VPP_FRW_TYPE_e> for u8 {
     }
 }
 
+impl fmt::Debug for VPP_FRW_TYPE_e {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            VPP_FRW_TYPE_e::FIRMWARE_SOFTWARE_TYPE_APP => {
+                write!(f, "App\n")
+            }
+            VPP_FRW_TYPE_e::FIRMWARE_SOFTWARE_TYPE_VPP => {
+                write!(f, "Vpp\n")
+            }
+            VPP_FRW_TYPE_e::FIRMWARE_SOFTWARE_TYPE_SYSAPP => {
+                write!(f, "Sys App\n")
+            }
+            VPP_FRW_TYPE_e::FIRMWARE_SOFTWARE_TYPE_LLOS => {
+                write!(f, "LLOS\n")
+            }
 
+
+        }
+    }
+}
 /// Index of an element in a typed array
-type MK_Index_t = u16 ;
+pub(crate) type MK_Index_t = u16 ;
 
 /// Execution Domain Types (Table 7-3)
 #[repr(u16)]
-pub enum MK_EXECUTION_DOMAIN_TYPE_e {
+pub(crate) enum MK_EXECUTION_DOMAIN_TYPE_e {
     /// System VPP Execution Domain
     MK_EXECUTION_DOMAIN_TYPE_VPP ,
     /// VPP Application Execution Domain
@@ -92,24 +114,24 @@ impl MK_EXECUTION_DOMAIN_TYPE_e {
 // }
 
 /// Composite Identifier of an IPC (Table 7-2)
-pub type MK_IPC_ID_u = u16;
-pub type MK_IPC_ID_e = u16;
+pub(crate) type MK_IPC_ID_u = u16;
+pub(crate) type MK_IPC_ID_e = u16;
 
 //impl Kernel_Object_Type<MK_IPC_ID_e> for MK_IPC_ID_u {}
 
 /// Composite Identifier of a Mailbox (Table 7-2)
-pub type MK_MAILBOX_ID_u = u16 ;
-pub type MK_MAILBOX_ID_e = u16 ;
+pub(crate) type MK_MAILBOX_ID_u = u16 ;
+pub(crate) type MK_MAILBOX_ID_e = u16 ;
 //impl Kernel_Object_Type<MK_MAILBOX_ID_e> for MK_MAILBOX_ID_u {}
 
 /// Composite Identifier of a Process (Table 7-2)
-pub type MK_Process_ID_u= u16 ;
-pub type MK_Process_ID_e= u16 ;
+pub (crate)type MK_Process_ID_u= u16 ;
+pub (crate)type MK_Process_ID_e= u16 ;
 //impl Kernel_Object_Type<MK_PROCESS_ID_e> for MK_PROCESS_ID_u {}
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 /// Priority Values of a Process (Table 7-4)
-pub enum MK_PROCESS_PRIORITY_e{
+pub (crate)enum MK_PROCESS_PRIORITY_e{
     /// Lowest Priority
     MK_PROCESS_PRIORITY_LOW,
     /// Normal Priority(Default)
@@ -151,12 +173,12 @@ impl fmt::Debug for MK_PROCESS_PRIORITY_e {
 }
 
 /// Composite Identifier of a shared library (Table 7-2)
-pub type MK_LIB_ID_u = u16 ;
-pub type MK_LIB_ID_e = u16 ;
+pub (crate)type MK_LIB_ID_u = u16 ;
+pub (crate)type MK_LIB_ID_e = u16 ;
 //impl Kernel_Object_Type<MK_LIB_ID_e> for MK_LIB_ID_u {}
 
 /// VRE Identifiers (Table 7-5)
-pub enum MK_VRE_e{
+pub (crate)enum MK_VRE_e{
     /// Access to the interfaces of the AES Function
     MK_VRE_AES,
     /// Access to the interface of the ECC Function
@@ -190,7 +212,8 @@ impl From<MK_VRE_e> for u32 {
 }
 
 /// Memory Address to a Process entry point
-//PROCESS_Function_t
+// should be changed depending on pointers handling in rust (as_ptr)
+pub (crate)type PROCESS_Function_t = XLEN ;
 
 /// Memory Address to a LLOS entry point
 // PLLOS_Function_t
@@ -199,10 +222,10 @@ impl From<MK_VRE_e> for u32 {
 // StackType_t
 
 /// Unique Universal Identifier
-type UUID_t = u128;
+pub (crate) type UUID_t = u128;
 
 /// void 32-bit
-type v32_u = u32 ;
+pub type v32_u = u32 ;
 
 /// Errors (Table 7-12)
 #[derive(Clone, Copy)]
@@ -247,7 +270,6 @@ impl From<MK_ERROR_e> for u16 {
         }
     }
 }
-
 impl fmt::Debug for MK_ERROR_e {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -317,7 +339,6 @@ impl From<MK_EXCEPTION_e> for u16 {
         }
     }
 }
-
 
 /// 32-bit bitmap for Exception, Signal or LIB Descriptor conveyor
 
@@ -406,7 +427,7 @@ impl From<MK_SIGNAL_e> for u32 {
 }
 
 /// Handle to a Kernel Object
-pub type  MK_HANDLE_t = u32;
+pub (crate) type  MK_HANDLE_t = u32;
 
 pub(crate) fn convert_to_handle(id: MK_Process_ID_u) -> MK_HANDLE_t{
     id as u32
@@ -417,7 +438,7 @@ pub(crate) fn convert_to_id(handle: MK_HANDLE_t) -> MK_Process_ID_u{
 
 
 /// Time unsigned 64-bit integer
-type MK_TIME_t = u64;
+pub (crate) type  MK_TIME_t = u64;
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 /// VPP States
@@ -467,33 +488,42 @@ impl fmt::Debug for VppState {
     }
 }
 
-
 // Scheduling Types (Table 7-7)
-/// Collaborative Scheduling
-pub const MK_SCHEDULING_TYPE_COLLABORATIVE: u8 = 0x01;
-/// Pree-emptive Scheduling
-pub const MK_SCHEDULING_TYPE_PREEMPTIVE: u8 = 0x02;
+pub enum VPP_SCHEDULING_TYPE_e {
+    /// Collaborative Scheduling
+    MK_SCHEDULING_TYPE_COLLABORATIVE,
+    /// Pree-emptive Scheduling
+    MK_SCHEDULING_TYPE_PREEMPTIVE,
+}
+impl From<VPP_SCHEDULING_TYPE_e> for u8 {
+    fn from(original: VPP_SCHEDULING_TYPE_e) -> u8 {
+        match original {
+            VPP_SCHEDULING_TYPE_e::MK_SCHEDULING_TYPE_COLLABORATIVE => 0x01,
+            VPP_SCHEDULING_TYPE_e::MK_SCHEDULING_TYPE_PREEMPTIVE =>0x02
+        }
+    }
+}
 
 
 //Constants and Limits for Any Primary Platfrom (Table 7-9)
 /// A grace period, in ticks, given to a VPP Application, so it may
 /// shutdown gracefully
-const MK_APP_STOP_GRACEFUL_TICKS : u8 = 10;
+pub (crate) const MK_APP_STOP_GRACEFUL_TICKS : u8 = 10;
 
 ///Minimal enumerated IPC identifier within the scope of an
 /// Execution Domain (including BASE_ID)
-const MK_IPC_DOMAIN_BASE_ID : u8 = 100;
+pub (crate) const MK_IPC_DOMAIN_BASE_ID : u8 = 100;
 
 /// Length of the IPC identified by MK_IPC_MAIN_COM_ID
 /// and MK_IPC_COM_MAIN_ID
 // const MK_IPC_COM_LENGTH: u8 =
 
 /// Maximal number of IPC descriptors per Firmware
-const MK_IPC_LIMIT : u8 = 64 ;
+pub (crate) const MK_IPC_LIMIT : u8 = 64 ;
 
 /// Maximal enumerated IPC identifier value within the
 /// scope of an Execution Domain (including MAX_ID)
-const MK_IPC_MAX_ID : u16 = 0x3FFF;
+pub (crate) const MK_IPC_MAX_ID : u16 = 0x3FFF;
 
 ///Length of the IPC identified by MK_IPC_MAIN_MGT_ID and
 /// MK_IPC_MGT_MAIN_ID
@@ -504,14 +534,14 @@ const MK_IPC_MAX_ID : u16 = 0x3FFF;
 
 ///Minimal enumerated library identifier within the scope
 /// of an Execution Domain (including BASE_ID)
-const MK_LIB_DOMAIN_BASE_ID: u8 = 100 ;
+pub(crate) const MK_LIB_DOMAIN_BASE_ID: u8 = 100 ;
 
 ///Maximal number of LIB Descriptors in the Firmware
-const MK_LIB_LIMIT : u8 = 32 ;
+pub(crate) const MK_LIB_LIMIT : u8 = 32 ;
 
 /// Maximal enumerated shared library identifier value
 /// within the scope of an Execution Domain (including MAX_ID)
-const MK_LIB_MAX_ID : u16 = 0x3FFF ;
+pub(crate) const MK_LIB_MAX_ID : u16 = 0x3FFF ;
 
 /// Minimal enumerated Mailbox identifiers within the
 /// scope of an Execution Domain
@@ -519,30 +549,30 @@ const MK_MAILBOX_DOMAIN_BASE_ID : u8 = 100 ;
 
 ///Maximal number of Mailbox descriptors per Firmware
 /// excluding the kernel Mailbox
-const MK_MAILBOX_LIMIT : u8 = 64 ;
+pub (crate) const MK_MAILBOX_LIMIT : usize = 64 ;
 
 /// Maximal enumerated Mailbox identifier value within
 /// the scope of a domain (including MAX_ID)
-const MK_MAILBOX_MAX_ID : u16 = 0x3FFF ;
+pub (crate) const MK_MAILBOX_MAX_ID : u16 = 0x3FFF ;
 
 /// Minimal number of IPCs accessible concurrently by
 /// a Process
-const MK_MIN_CONCURRENT_IPC_LIMIT : u8 = 6 ;
+pub (crate) const MK_MIN_CONCURRENT_IPC_LIMIT : u8 = 6 ;
 
 ///The minimal size in bytes, supported by the Primary Platform,
 /// for the sum of all stack memory used by all Processes in a VPP Application
-const MK_MIN_STACKS_SUM_SUPPORTED : u16 = 24_000 ; //24Kb
+pub (crate) const MK_MIN_STACKS_SUM_SUPPORTED : u16 = 24_000 ; //24Kb
 
 ///Minimal number of IPC descriptors in a Firmware
-const MK_MIN_APP_IPC : u8 = 0 ;
+pub (crate) const MK_MIN_APP_IPC : u8 = 0 ;
 
 ///Minimal number of Mailbox descriptor of a Firmware,
 /// not including kernel Mailboxes
-const MK_MIN_APP_MAILBOXES : u8 = 0 ;
+pub (crate) const MK_MIN_APP_MAILBOXES : u8 = 0 ;
 
 /// Minimal number of Process supported by a VPP
 /// Application
-const MK_MIN_APP_PROCESSS : u8 = 1 ;
+pub (crate) const MK_MIN_APP_PROCESSS : u8 = 1 ;
 
 /// Minimal size in bytes of Memory Partition in [VFF]
 /// supported by the Primary Platform
@@ -550,22 +580,22 @@ const MK_MIN_APP_PROCESSS : u8 = 1 ;
 
 /// Minimum size of the Virtual Memory that the MMF
 /// shall manage
-const MK_MIN_VIRTUAL_MEMORY_SIZE : u16 = 1_000 ; // 1KB
+pub (crate) const MK_MIN_VIRTUAL_MEMORY_SIZE : u16 = 1_000 ; // 1KB
 
 /// Minimal enumerated Process identifier within the
 /// scope of an Execution Domain (including BASE_ID)
-const MK_PROCESS_DOMAIN_BASE_ID : u8 = 100 ;
+pub (crate) const MK_PROCESS_DOMAIN_BASE_ID : u8 = 100 ;
 
 /// Maximal number of Process Descriptors in the Firmware
-const MK_PROCESS_LIMIT : u8 = 32 ;
+pub (crate) const MK_PROCESS_LIMIT : u8 = 32 ;
 
 /// Maximal enumerated Process identifier value within
 /// the scope of an Execution Domain (included)
-const MK_MAX_PROCESS_ID : u16 = 0x3FFF ;
+pub (crate) const MK_MAX_PROCESS_ID : u16 = 0x3FFF ;
 
 /// Minimal stack size supported for a Process, given in
 /// StackType_t units
-const MK_MIN_SUPPORTED_STACK : u16 = 512 ; // 512 StackType_t units (2KB if 32bit)
+pub (crate) const MK_MIN_SUPPORTED_STACK : u16 = 512 ; // 512 StackType_t units (2KB if 32bit)
 
 
 
@@ -628,12 +658,12 @@ const MK_MIN_SUPPORTED_STACK : u16 = 512 ; // 512 StackType_t units (2KB if 32bi
 // MK_SIGNAL_KILL_ACCEPTED, but they are being used on different mailboxes.
 
 /// The IPC updated
-const MK_SIGNAL_IPC_UPDATED: MK_SIGNAL_e = MK_SIGNAL_e::MK_SIGNAL_DOMAIN_BASE_0 ;
+pub const MK_SIGNAL_IPC_UPDATED: MK_SIGNAL_e = MK_SIGNAL_e::MK_SIGNAL_DOMAIN_BASE_0 ;
 /// MGT signaled the Main Process to terminate itself
-const MK_SIGNAL_KILL_REQUESTED: MK_SIGNAL_e = MK_SIGNAL_e::MK_SIGNAL_DOMAIN_BASE_1 ;
+pub const MK_SIGNAL_KILL_REQUESTED: MK_SIGNAL_e = MK_SIGNAL_e::MK_SIGNAL_DOMAIN_BASE_1 ;
 /// The Main Process signaled MGT that it has accepted the kill request
-const MK_SIGNAL_KILL_ACCEPTED : MK_SIGNAL_e = MK_SIGNAL_e::MK_SIGNAL_DOMAIN_BASE_1 ;
+pub const MK_SIGNAL_KILL_ACCEPTED : MK_SIGNAL_e = MK_SIGNAL_e::MK_SIGNAL_DOMAIN_BASE_1 ;
 /// The Main Process signaled MGT to restart the VPP Application
-const MK_SIGNAL_APP_RESTART :  MK_SIGNAL_e = MK_SIGNAL_e::MK_SIGNAL_DOMAIN_BASE_2 ;
+pub  const MK_SIGNAL_APP_RESTART :  MK_SIGNAL_e = MK_SIGNAL_e::MK_SIGNAL_DOMAIN_BASE_2 ;
 /// The Main Process committed suicide
-const MK_SIGNAL_KILL_ITSELF: MK_SIGNAL_e = MK_SIGNAL_e::MK_SIGNAL_DOMAIN_BASE_3 ;
+pub const MK_SIGNAL_KILL_ITSELF: MK_SIGNAL_e = MK_SIGNAL_e::MK_SIGNAL_DOMAIN_BASE_3 ;

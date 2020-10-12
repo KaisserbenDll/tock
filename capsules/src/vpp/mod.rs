@@ -7,3 +7,8 @@ pub mod ProcessManagerConsoleCap;
 // without capabilities
 pub mod ProcessManagerConsole;
 pub mod sub_test;
+pub mod mgt_service;
+pub mod vff;
+pub mod mailbox;
+// pub mod ipc;
+pub mod com_service;

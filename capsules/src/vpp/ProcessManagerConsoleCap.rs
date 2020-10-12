@@ -14,6 +14,7 @@ use crate::vpp::mloi::MK_ERROR_e::*;
 use crate::vpp::mloi::MK_PROCESS_PRIORITY_e::*;
 use crate::vpp::mloi::*;
 use crate::vpp::process::*;
+use crate::vpp::mloi::VppState::*;
 use crate::vpp::process;
 use kernel::{Kernel, capabilities};
 use kernel::introspection::KernelInfo;
@@ -29,6 +30,8 @@ use kernel::{Callback, Driver,Grant,AppId};
 use crate::virtual_uart::{MuxUart, UartDevice};
 use kernel::static_init;
 use kernel::hil;
+use kernel::procs::{FunctionCall,FunctionCallSource,Task};
+use crate::vpp::mloi::VppState::RUNNING;
 
 pub const DRIVER_NUM: usize = 0x90004 ;
 
@@ -91,7 +94,20 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a, C> {
                 // debug!("Syncing States");
                 // dummy variable
                 let process = &vppprocesses[i].clone().unwrap();
-                process.sync_vpp_tock_states();
+                process.tockprocess.map(|proc| unsafe {
+                    let ccb = FunctionCall {
+                        source: FunctionCallSource::Kernel,
+                        pc: 0x2003005c,
+                        argument0: 0x20030034,
+                        argument1: 0x10003c00,
+                        argument2: 0x1fb0,
+                        argument3: 0x10004800,
+                    };
+                proc.set_process_function(ccb);
+                proc.set_yielded_state();
+                proc.stop();
+                });
+                //process.sync_vpp_tock_states();
                 // vppprocesses[i].unwrap().sync_vpp_tock_states();
             }
         }
@@ -164,7 +180,7 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a, C> {
                         let clean_str = s.trim();
                         if clean_str.starts_with("help") {
                             debug!("Welcome to the process console.");
-                            debug!("Valid commands are: help status list test");
+                            debug!("Valid commands are: help status list resume  suspend yield");
                         }
                         else if clean_str.starts_with("list") {
                             debug!(" PID    Name                Quanta  Syscalls  Dropped Callbacks  Restarts    State  Grants   VPPState  Error");
@@ -208,7 +224,8 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a, C> {
                                 "Timeslice expirations: {}",
                                 info.timeslice_expirations(&self.capability)
                             );
-                        }else if clean_str.starts_with("resume") {
+                        }
+                        else if clean_str.starts_with("resume") {
                              let argument = clean_str.split_whitespace().nth(1);
                              if argument.is_some(){
                                  if argument.unwrap() == self.vpp_processes[0].as_ref().unwrap().tockprocess.unwrap().get_process_name() {
@@ -227,8 +244,34 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a, C> {
                                  debug!("No Process");
                              }
                          }
+                        else if clean_str.starts_with("suspend") {
+                            let argument = clean_str.split_whitespace().nth(1);
+                            if argument.is_some(){
+                                if argument.unwrap() == self.vpp_processes[0].as_ref().unwrap().tockprocess.unwrap().get_process_name() {
+                                    let handle=self._mk_get_process_handle(0);
+                                    self._mk_suspend_process(handle);
+                                }else {
+                                    debug!("Name of Process non existant");
+                                }
+                            } else  {
+                                debug!("No Process");
+                            }
+                        }
+                        else if clean_str.starts_with("yield") {
+                            let argument = clean_str.split_whitespace().nth(1);
+                            if argument.is_some(){
+                                if argument.unwrap() == self.vpp_processes[0].as_ref().unwrap().tockprocess.unwrap().get_process_name() {
+                                    let handle=self._mk_get_process_handle(0);
+                                    self._mk_yield(handle);
+                                }else {
+                                    debug!("Name of Process non existant");
+                                }
+                            } else  {
+                                debug!("No Process");
+                            }
+                        }
                         else {
-                            debug!("Valid commands are: help status list resume");
+                            debug!("Valid commands are: help status list resume suspend yield");
                         }
                     }
                     Err(_e) => debug!("Invalid command: {:?}", command),
@@ -451,7 +494,8 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a, C> {
             // process.tockprocess.unwrap().set_yielded_state();
             process.tockprocess.unwrap().stop();
             debug!("Tock Process {} suspended", vppproc_name);
-
+            //process.sync_vpp_tock_states();
+            debug!("VPP Process state {:?}", process.get_vpp_state());
             // self.kernel.process_each_capability(
             //     &self.capability,
             //     |proc| {
@@ -483,6 +527,11 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a, C> {
             let vppproc_name = process.tockprocess.unwrap().get_process_name();
             process.tockprocess.unwrap().resume();
             debug!("Tock Process {} Resumed", vppproc_name);
+            //process.snyc_tock_vpp_states();
+            debug!("VPP state {:?},Tock state {:?} ", process.get_vpp_state(),
+            process.tockprocess.unwrap().get_state());
+            // this is totally wrong !!!
+            // process.vppstate.set(RUNNING);
 
             // self.kernel.process_each_capability(
             //     &self.capability,
@@ -508,6 +557,9 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a, C> {
             vpp_process.unwrap().yield_vpp_process();
            // Change Tock State
            vpp_process.unwrap().tockprocess.unwrap().set_yielded_state();
+           vpp_process.unwrap().snyc_tock_vpp_states();
+           debug!("VPP Process state {:?}", vpp_process.unwrap().get_vpp_state());
+
        }
    }
     // VPP dedicated
@@ -674,7 +726,7 @@ impl Driver  for VPMDriver {
                 {
                     debug!("Testing States");
                     let process = self.vpm.get_process_ref_internal(data as u32);
-                    process.unwrap().sync_vpp_tock_states();
+                    //process.unwrap().sync_vpp_tock_states();
                     let tock_state = process.unwrap().tockprocess.unwrap().get_state();
                     let vpp_state = process.unwrap().vppstate.get();
                     debug!("Tock State {:?} , Vpp Process {:?}", tock_state, vpp_state);

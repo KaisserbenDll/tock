@@ -27,6 +27,7 @@ use crate::platform::{Chip, Platform};
 use crate::process::{self, Task};
 use crate::returncode::ReturnCode;
 use crate::syscall::{ContextSwitchReason, Syscall};
+use crate::sched::ListenerType::TaskQueued;
 
 /// Threshold in microseconds to consider a process's timeslice to be exhausted.
 /// That is, Tock will skip re-scheduling a process if its remaining timeslice
@@ -37,12 +38,9 @@ pub(crate) const MIN_QUANTA_THRESHOLD_US: u32 = 500;
 #[derive(Clone,Copy,PartialEq)]
 pub enum ListenerType {
     Idle,
-    ProcessScheduled,
-    ProcessUnscheduled,
-    ProcessYielded(AppId),
-    Flagged
+    TaskQueued,
 }
-pub const LISTENER: Cell<ListenerType> = Cell::new(ListenerType::Idle);
+pub static mut LISTENER: Cell<ListenerType> = Cell::new(ListenerType::Idle);
 
 /// Trait which any scheduler must implement.
 pub trait Scheduler<C: Chip> {
@@ -685,7 +683,6 @@ impl Kernel {
                                         debug!("[{:?}] yield", process.appid());
                                     }
                                     process.set_yielded_state();
-                                    LISTENER.set(ListenerType::ProcessYielded(process.appid()));
                                     // There might be already enqueued callbacks
                                     continue;
                                 }
@@ -856,6 +853,7 @@ impl Kernel {
                                 }
 
                                 process.set_process_function(ccb);
+                                LISTENER.set(TaskQueued);
                             }
                             Task::IPC((otherapp, ipc_type)) => {
                                 ipc.map_or_else(
