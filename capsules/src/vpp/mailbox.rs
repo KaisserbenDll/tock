@@ -6,41 +6,75 @@ use crate::vpp::mloi::*;
 use core::cell::Cell;
 use crate::vpp::mloi::VppState::*;
 use kernel::common::RingBuffer;
-use kernel::common::cells::MapCell;
+use crate::vpp::mloi::MK_ERROR_e::{MK_ERROR_NONE, MK_ERROR_UNKNOWN_PRIORITY, MK_ERROR_UNKNOWN_ID};
 
 #[derive(Clone,Copy)]
 pub struct vnp  {}
-// #[derive(Clone)]
 pub struct mbox {
     mailbox_id: Cell<MK_MAILBOX_ID_u>,
     send_queue:RingBuffer<'static, vnp>,
     recieve_queue: RingBuffer<'static, vnp> ,
+    caller_process_id: Cell<MK_Process_ID_u>
 }
 
 impl  mbox {
-    pub fn new(&self, sq_packets: &'static mut [vnp], rq_packets: &'static mut [vnp])
+    pub fn new(&self,
+               sq_packets: &'static mut [vnp],
+               rq_packets: &'static mut [vnp],
+               caller_proc_id: MK_Process_ID_u )
         -> mbox {
         mbox {
             mailbox_id: Cell::new(0),
             send_queue: RingBuffer::new(sq_packets),
             recieve_queue: RingBuffer::new(rq_packets),
+            caller_process_id: Cell::new(caller_proc_id)
         }
     }
+    pub fn get_mb_id(&self) -> MK_MAILBOX_ID_u {self.mailbox_id.get()}
 }
 pub struct MailboxManager {
-    mailboxes: Option<[mbox; MK_MAILBOX_LIMIT]>,
+    mailboxes: [Option<mbox>; MK_MAILBOX_LIMIT],
+    last_error: Cell<MK_ERROR_e>,
 }
 impl MailboxManager {
-    pub fn new(mailboxes: [mbox;MK_MAILBOX_LIMIT]) -> MailboxManager {
+    pub fn new(mailboxes: [Option<mbox>;MK_MAILBOX_LIMIT]) -> MailboxManager {
         // fix the size of the array. Populate array with the argument and fill the rest with None.
         MailboxManager  {
-            mailboxes: Some(mailboxes),
+            mailboxes: mailboxes,
+            last_error: Cell::new(MK_ERROR_NONE)
         }
     }
-
+    pub fn Get_Mailbox_ref_internal(&self, handle: MK_HANDLE_t) -> Option<&mbox> {
+        let MailboxID = convert_handle_to_mbid(handle);
+        let mut return_pointer: Option<&mbox> = None ;
+        for mailbox in self.mailboxes.iter() {
+            match mailbox{
+                Some(mb) =>{
+                    if mb.get_mb_id() == MailboxID {
+                        self.last_error.set(MK_ERROR_NONE);
+                        return_pointer = Some(mb);
+                        break;
+                    } else {
+                        self.last_error.set(MK_ERROR_UNKNOWN_ID);
+                        return_pointer = None;
+                    }
+                },
+                None => {
+                    self.last_error.set(MK_ERROR_UNKNOWN_ID);
+                    return_pointer = None;
+                }
+            }
+        }
+        return_pointer
+    }
     /// Get a Mailbox Handle from a Mailbox identifier
-    pub fn _mk_Get_Mailbox_Handle(&self,_eMailboxID: MK_MAILBOX_ID_u) -> MK_HANDLE_t{
-        unimplemented!();
+    pub fn _mk_Get_Mailbox_Handle(&self,_eMailboxID: MK_MAILBOX_ID_u) -> Option<MK_HANDLE_t>{
+      let handle = convert_mbid_to_handle(_eMailboxID);
+      let mailbox = self.Get_Mailbox_ref_internal(handle);
+      // None is the equivalent of NULL in rust, that is why i am wrapping this with
+        // the Option Box
+        if mailbox.is_some() {Some(handle)} else {None}
+
     }
     /// When waiting for Signal on any Mailbox owned by the caller Process, get the Mailbox
     /// identifier of a Process that has a pending Signal.

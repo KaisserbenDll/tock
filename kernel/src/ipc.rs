@@ -11,7 +11,7 @@ use crate::mem::{AppSlice, Shared};
 use crate::process;
 use crate::returncode::ReturnCode;
 use crate::sched::Kernel;
-
+use crate::debug;
 /// Syscall number
 pub const DRIVER_NUM: usize = 0x10000;
 
@@ -187,7 +187,7 @@ impl Driver for IPC {
         };
 
         let app_identifier = target_id - 1;
-
+        debug!("AppID is {:?}", app_identifier);
         self.data
             .kernel
             .lookup_app_by_identifier(app_identifier)
@@ -223,22 +223,36 @@ impl Driver for IPC {
         target_id: usize,
         slice: Option<AppSlice<Shared, u8>>,
     ) -> ReturnCode {
+        debug!("Testing _allow");
+        debug!("check args appid : {:?} targetid: {:?}",appid,target_id);
         if target_id == 0 {
             match slice {
                 Some(slice_data) => {
                     let ret = self.data.kernel.process_until(|p| {
                         let s = p.get_process_name().as_bytes();
+                        debug!("pkg name {:?} and len {:?}", s,s.len());
                         // are slices equal?
+                        debug!("slice is {:?} and len {:?}",
+                               slice_data.iter().map(|x| debug!("slice_data {:?}", x)),slice_data.len());
+                        debug!("length slice is {:?} and len slice found {:?}",s.len(),slice_data.len());
+
                         if s.len() == slice_data.len()
-                            && s.iter().zip(slice_data.iter()).all(|(c1, c2)| c1 == c2)
-                        {
+                            && s.iter().zip(slice_data.iter()).all(|(c1, c2)|{
+
+                            debug!("byte1 {:?} , byte 2 {:?}", c1, c2);
+                            c1 == c2
+                        })
+
+                        {  debug!("led_service_id {:?} ",p.appid().id() as usize );
                             ReturnCode::SuccessWithValue {
                                 value: (p.appid().id() as usize) + 1,
+
                             }
                         } else {
                             ReturnCode::FAIL
                         }
                     });
+                    debug!("Returns {:?}", ret);
                     if ret != ReturnCode::FAIL {
                         return ret;
                     }

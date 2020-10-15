@@ -114,24 +114,31 @@ impl MK_EXECUTION_DOMAIN_TYPE_e {
 // }
 
 /// Composite Identifier of an IPC (Table 7-2)
-pub(crate) type MK_IPC_ID_u = u16;
-pub(crate) type MK_IPC_ID_e = u16;
+pub type MK_IPC_ID_u = u16;
+pub type MK_IPC_ID_e = u16;
 
 //impl Kernel_Object_Type<MK_IPC_ID_e> for MK_IPC_ID_u {}
 
 /// Composite Identifier of a Mailbox (Table 7-2)
-pub(crate) type MK_MAILBOX_ID_u = u16 ;
-pub(crate) type MK_MAILBOX_ID_e = u16 ;
+pub type MK_MAILBOX_ID_u = u16 ;
+pub type MK_MAILBOX_ID_e = u16 ;
 //impl Kernel_Object_Type<MK_MAILBOX_ID_e> for MK_MAILBOX_ID_u {}
+pub fn convert_mbid_to_handle(_eMailboxID: MK_MAILBOX_ID_u) -> MK_HANDLE_t{_eMailboxID as u32}
+pub fn convert_handle_to_mbid(handle: MK_HANDLE_t) -> MK_MAILBOX_ID_u{handle as u16}
 
 /// Composite Identifier of a Process (Table 7-2)
-pub (crate)type MK_Process_ID_u= u16 ;
-pub (crate)type MK_Process_ID_e= u16 ;
+pub type MK_Process_ID_u= u16 ;
+pub type MK_Process_ID_e= u16 ;
 //impl Kernel_Object_Type<MK_PROCESS_ID_e> for MK_PROCESS_ID_u {}
+pub fn convert_to_handle(id: MK_Process_ID_u) -> MK_HANDLE_t{
+    id as u32
+}
+pub fn convert_to_id(handle: MK_HANDLE_t) -> MK_Process_ID_u{handle as u16}
+
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 /// Priority Values of a Process (Table 7-4)
-pub (crate)enum MK_PROCESS_PRIORITY_e{
+pub enum MK_PROCESS_PRIORITY_e{
     /// Lowest Priority
     MK_PROCESS_PRIORITY_LOW,
     /// Normal Priority(Default)
@@ -173,12 +180,12 @@ impl fmt::Debug for MK_PROCESS_PRIORITY_e {
 }
 
 /// Composite Identifier of a shared library (Table 7-2)
-pub (crate)type MK_LIB_ID_u = u16 ;
-pub (crate)type MK_LIB_ID_e = u16 ;
+pub type MK_LIB_ID_u = u16 ;
+pub type MK_LIB_ID_e = u16 ;
 //impl Kernel_Object_Type<MK_LIB_ID_e> for MK_LIB_ID_u {}
 
 /// VRE Identifiers (Table 7-5)
-pub (crate)enum MK_VRE_e{
+pub enum MK_VRE_e{
     /// Access to the interfaces of the AES Function
     MK_VRE_AES,
     /// Access to the interface of the ECC Function
@@ -213,7 +220,7 @@ impl From<MK_VRE_e> for u32 {
 
 /// Memory Address to a Process entry point
 // should be changed depending on pointers handling in rust (as_ptr)
-pub (crate)type PROCESS_Function_t = XLEN ;
+pub type PROCESS_Function_t = XLEN ;
 
 /// Memory Address to a LLOS entry point
 // PLLOS_Function_t
@@ -222,7 +229,7 @@ pub (crate)type PROCESS_Function_t = XLEN ;
 // StackType_t
 
 /// Unique Universal Identifier
-pub (crate) type UUID_t = u128;
+pub  type UUID_t = u128;
 
 /// void 32-bit
 pub type v32_u = u32 ;
@@ -428,14 +435,6 @@ impl From<MK_SIGNAL_e> for u32 {
 
 /// Handle to a Kernel Object
 pub (crate) type  MK_HANDLE_t = u32;
-
-pub(crate) fn convert_to_handle(id: MK_Process_ID_u) -> MK_HANDLE_t{
-    id as u32
-}
-pub(crate) fn convert_to_id(handle: MK_HANDLE_t) -> MK_Process_ID_u{
-    handle as u16
-}
-
 
 /// Time unsigned 64-bit integer
 pub (crate) type  MK_TIME_t = u64;
