@@ -14,7 +14,7 @@ There are two alternatives to run tock on OpenTitan. You program the board or ru
 Programming the board 
 ---------------------
 
-Tock on OpenTitan requires lowRISC/opentitan@0e5d819d61b5bf56f8453ad877eb10e3c52fc542 or newer.
+Tock on OpenTitan requires lowRISC/opentitan@4429c362900713c059fbd870db140e0058e1c0eb or newer. In general it is recommended that users start with the latest OpenTitan bitstream and if that results in issues try the one mentioned above.
 
 For more information you can follow the [OpenTitan development flow](https://docs.opentitan.org/doc/ug/getting_started_fpga/index.html#testing-the-demo-design) to flash the image.
 

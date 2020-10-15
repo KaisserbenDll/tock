@@ -664,7 +664,6 @@ impl<'a> ProcessStateCell<'a> {
     }
 }
 
-
 /// The reaction the kernel should take when an app encounters a fault.
 ///
 /// When an exception occurs during an app's execution (a common example is an
@@ -863,7 +862,7 @@ pub struct Process<'a, C: 'static + Chip> {
     /// `Running` and `Yielded` states. The system can control the process by
     /// switching it to a "stopped" state to prevent the scheduler from
     /// scheduling it.
-    // state: Cell<State>,
+
     state: ProcessStateCell<'static>,
 
     /// How to deal with Faults occurring in the process
@@ -903,8 +902,6 @@ impl<C: Chip> ProcessType for Process<'_, C> {
             return false;
         }
 
-        self.kernel.increment_work();
-
         let ret = self.tasks.map_or(false, |tasks| tasks.enqueue(task));
 
         // Make a note that we lost this callback if the enqueue function
@@ -913,6 +910,8 @@ impl<C: Chip> ProcessType for Process<'_, C> {
             self.debug.map(|debug| {
                 debug.dropped_callback_count += 1;
             });
+        } else {
+            self.kernel.increment_work();
         }
 
         ret
@@ -932,7 +931,14 @@ impl<C: Chip> ProcessType for Process<'_, C> {
                 // to `callback_id`.
                 Task::FunctionCall(function_call) => match function_call.source {
                     FunctionCallSource::Kernel => true,
-                    FunctionCallSource::Driver(id) => id != callback_id,
+                    FunctionCallSource::Driver(id) => {
+                        if id != callback_id {
+                            true
+                        } else {
+                            self.kernel.decrement_work();
+                            false
+                        }
+                    }
                 },
                 _ => true,
             });
@@ -957,8 +963,6 @@ impl<C: Chip> ProcessType for Process<'_, C> {
 
     fn set_yielded_state(&self) {
         if self.state.get() == State::Running {
-            // self.state.set(State::Yielded);
-            // self.kernel.decrement_work();
             self.state.update(State::Yielded);
         }
     }
@@ -1299,11 +1303,6 @@ impl<C: Chip> ProcessType for Process<'_, C> {
                 // If we got an `Ok` with the new stack pointer we are all
                 // set and should mark that this process is ready to be
                 // scheduled.
-
-                // // We just setup up a new callback to do, which means this
-                // // process wants to execute, so we set that there is work to
-                // // be done.
-                // self.kernel.increment_work();
 
                 // Move this process to the "running" state so the scheduler
                 // will schedule it.
@@ -1921,7 +1920,8 @@ impl<C: 'static + Chip> Process<'_, C> {
         process.flash = app_flash;
 
         process.stored_state = MapCell::new(Default::default());
-        //process.state = Cell::new(State::Unstarted);
+
+        // Mark this process as unstarted
         process.state = ProcessStateCell::new(process.kernel);
         process.fault_response = fault_response;
         process.restart_count = Cell::new(0);
@@ -1991,7 +1991,6 @@ impl<C: 'static + Chip> Process<'_, C> {
             }
         };
 
-        // Mark this process as having something to do (it has to start!).
         kernel.increment_work();
 
         // Return the process object and a remaining memory for processes slice.

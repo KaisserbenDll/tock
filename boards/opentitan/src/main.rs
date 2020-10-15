@@ -24,11 +24,15 @@ use rv32i::csr;
 #[allow(dead_code)]
 mod aes_test;
 
+#[allow(dead_code)]
+mod multi_alarm_test;
+
 pub mod io;
 pub mod usb;
 
 // Number of allowed process
 const NUM_PROCS: usize =4;
+
 //
 // Actual memory for holding the active process structures. Need an empty list
 // at least.
@@ -67,10 +71,6 @@ struct OpenTitan {
         'static,
         capsules::virtual_uart::UartDevice<'static>,
     >,
-    usb: &'static capsules::usb::usb_user::UsbSyscallDriver<
-        'static,
-        capsules::usb::usbc_client::Client<'static, lowrisc::usbdev::Usb<'static>>,
-    >,
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<lowrisc::i2c::I2c<'static>>,
     pm : &'static capsules::vpp::pmsyscall::ProcessManager,
      //vpmdriver: &'static capsules::vpp::ProcessManagerConsoleCap::VPMDriver,
@@ -94,7 +94,6 @@ impl Platform for OpenTitan {
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::low_level_debug::DRIVER_NUM => f(Some(self.lldb)),
-            capsules::usb::usb_user::DRIVER_NUM => f(Some(self.usb)),
             capsules::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
             _ => f(None),
         }
@@ -218,7 +217,7 @@ pub unsafe fn reset_handler() {
         MuxAlarm<'static, earlgrey::timer::RvTimer>,
         MuxAlarm::new(alarm)
     );
-    hil::time::Alarm::set_client(&earlgrey::timer::TIMER, mux_alarm);
+    hil::time::Alarm::set_alarm_client(&earlgrey::timer::TIMER, mux_alarm);
 
     // Alarm
     let virtual_alarm_user = static_init!(
@@ -236,13 +235,13 @@ pub unsafe fn reset_handler() {
             board_kernel.create_grant(&memory_allocation_cap)
         )
     );
-    hil::time::Alarm::set_client(virtual_alarm_user, alarm);
+    hil::time::Alarm::set_alarm_client(virtual_alarm_user, alarm);
 
     let chip = static_init!(
         earlgrey::chip::EarlGrey<VirtualMuxAlarm<'static, earlgrey::timer::RvTimer>>,
         earlgrey::chip::EarlGrey::new(scheduler_timer_virtual_alarm)
     );
-    scheduler_timer_virtual_alarm.set_client(chip.scheduler_timer());
+    scheduler_timer_virtual_alarm.set_alarm_client(chip.scheduler_timer());
     CHIP = Some(chip);
 
     // Need to enable all interrupts for Tock Kernel
@@ -271,8 +270,6 @@ pub unsafe fn reset_handler() {
         lowrisc::hmac::Hmac,
         [u8; 32]
     ));
-
-    let usb = usb::UsbComponent::new(board_kernel).finalize(());
 
     let i2c_master = static_init!(
         capsules::i2c_master::I2CMasterDriver<lowrisc::i2c::I2c<'static>>,
@@ -305,6 +302,7 @@ pub unsafe fn reset_handler() {
     // capsules::vpp::ProcessManagerConsoleCap::VPMDriver,
     // capsules::vpp::ProcessManagerConsoleCap::VPMDriver::new(vpp_process_component)) ;
     // vpp_process_component.start();
+    debug!("OpenTitan initialisation complete. Entering main loop");
 
     let opentitan = OpenTitan {
         gpio: gpio,
@@ -314,13 +312,15 @@ pub unsafe fn reset_handler() {
         alarm: alarm,
         hmac,
         lldb: lldb,
-        usb,
+        //usb,
         i2c_master,
         pm,
         // vpmdriver,
     };
 
-    debug!("OpenTitan initialisation complete. Entering main loop");
+    // USB support is currently broken in the OpenTitan hardware
+    // See https://github.com/lowRISC/opentitan/issues/2598 for more details
+    // let usb = usb::UsbComponent::new(board_kernel).finalize(());
 
     /// These symbols are defined in the linker script.
     extern "C" {
@@ -342,10 +342,9 @@ pub unsafe fn reset_handler() {
     //     alarm: alarm,
     //     hmac,
     //     lldb: lldb,
-    //     usb,
     //     i2c_master,
-    //     pm,
     // };
+
     let app_flash = core::slice::from_raw_parts(
         &_sapps as *const u8,
         &_eapps as *const u8 as usize - &_sapps as *const u8 as usize);
@@ -384,6 +383,9 @@ pub unsafe fn reset_handler() {
   //
   // let vpmdriver = static_init!(capsules::vpp::ProcessManagerConsole::VPMDriver,
   // capsules::vpp::ProcessManagerConsole::VPMDriver::new(vpp_process_console));
+
+
+
 
 
     let scheduler = components::sched::priority::PriorityComponent::new(board_kernel).finalize(());

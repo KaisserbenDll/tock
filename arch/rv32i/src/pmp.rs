@@ -90,7 +90,7 @@ impl fmt::Display for PMPRegion {
 
         write!(
             f,
-            "addr={:p}, size={:#X}, cfg={:#X} ({}{}{})",
+            "addr={:p}, size={:#010X}, cfg={:#X} ({}{}{})",
             self.location.0,
             self.location.1,
             u8::from(self.cfg),
@@ -175,11 +175,11 @@ impl Default for PMPConfig {
 
 impl fmt::Display for PMPConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "PMP regions:")?;
+        writeln!(f, " PMP regions:")?;
         for (n, region) in self.regions.iter().enumerate() {
             match region {
-                None => writeln!(f, "<unset>")?,
-                Some(region) => writeln!(f, " [{}]: {}", n, region)?,
+                None => writeln!(f, "  <unset>")?,
+                Some(region) => writeln!(f, "  [{}]: {}", n, region)?,
             }
         }
         Ok(())
@@ -244,9 +244,7 @@ impl PMPConfig {
 impl kernel::mpu::MPU for PMP {
     type MpuConfig = PMPConfig;
 
-    fn enable_mpu(&self) {}
-
-    fn disable_mpu(&self) {
+    fn clear_mpu(&self) {
         // We want to disable all of the hardware entries, so we use `$x` here,
         // and not `$x / 2`.
         for x in 0..$x {
@@ -299,8 +297,15 @@ impl kernel::mpu::MPU for PMP {
         csr::CSR.pmpcfg[0].modify(csr::pmpconfig::pmpcfg::w0::SET);
         csr::CSR.pmpcfg[0].modify(csr::pmpconfig::pmpcfg::x0::SET);
         csr::CSR.pmpcfg[0].modify(csr::pmpconfig::pmpcfg::a0::TOR);
-        // MPU is not configured for any process now
+        // PMP is not configured for any process now
         self.last_configured_for.take();
+    }
+
+    fn enable_app_mpu(&self) {}
+
+    fn disable_app_mpu(&self) {
+        // PMP is not enabled for machine mode, so we don't have to do
+        // anything
     }
 
     fn number_total_regions(&self) -> usize {
@@ -336,9 +341,6 @@ impl kernel::mpu::MPU for PMP {
         if start % 4 != 0 {
             start += 4 - (start % 4);
         }
-
-        // RISC-V PMP is not inclusive of the final address, while Tock is, increase the size by 1
-        size += 1;
 
         // Region size always has to align to 4 bytes
         if size % 4 != 0 {
@@ -389,13 +391,10 @@ impl kernel::mpu::MPU for PMP {
         };
 
         // Make sure there is enough memory for app memory and kernel memory.
-        let memory_size = cmp::max(
+        let mut region_size = cmp::max(
             min_memory_size,
             initial_app_memory_size + initial_kernel_memory_size,
-        );
-
-        // RISC-V PMP is not inclusive of the final address, while Tock is, increase the memory_size by 1
-        let mut region_size = memory_size as usize + 1;
+        ) as usize;
 
         // Region size always has to align to 4 bytes
         if region_size % 4 != 0 {
