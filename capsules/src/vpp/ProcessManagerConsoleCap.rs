@@ -32,6 +32,7 @@ use kernel::static_init;
 use kernel::hil;
 use kernel::procs::{FunctionCall,FunctionCallSource,Task};
 use crate::vpp::mloi::VppState::RUNNING;
+use core::convert::TryInto;
 
 pub const DRIVER_NUM: usize = 0x90004 ;
 
@@ -700,18 +701,24 @@ impl Driver  for VPMDriver {
                     //debug!("Data is {:?}", data);
                     let handle = convert_to_handle(data as u16);
                     //let handle = self.vpm._mk_get_process_handle(0);
-                    self.vpm._mk_suspend_process(handle);
+                    let error_result = self.vpm._mk_suspend_process(handle);
+                    let ret = MK_ERROR_e::into(error_result);
                     self.vpm._mk_Get_Error();
                     debug!("Last Error {:?}", self.vpm.last_error.get());
-                    ReturnCode::SUCCESS
+                    ReturnCode::SuccessWithValue {
+                        value: ret
+                    }
                 },
             2 =>
                 {
                     debug!("Resuming Process");
                     let handle = convert_to_handle(data as u16);
-                    self.vpm._mk_resume_process(handle);
+                    let error_result = self.vpm._mk_resume_process(handle);
+                    let ret = MK_ERROR_e::into(error_result);
                     self.vpm._mk_Get_Error();
-                    ReturnCode::SUCCESS
+                    ReturnCode::SuccessWithValue {
+                        value: ret
+                    }
                 },
             3 =>
                 {

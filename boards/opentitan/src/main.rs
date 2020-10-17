@@ -57,7 +57,7 @@ struct OpenTitan {
     led: &'static capsules::led::LED<'static, earlgrey::gpio::GpioPin<'static>>,
     gpio: &'static capsules::gpio::GPIO<'static, earlgrey::gpio::GpioPin<'static>>,
     console: &'static capsules::console::Console<'static>,
-    ipc: kernel::ipc::IPC,
+    //ipc: kernel::ipc::IPC,
     alarm: &'static capsules::alarm::AlarmDriver<
         'static,
         VirtualMuxAlarm<'static, earlgrey::timer::RvTimer<'static>>,
@@ -73,7 +73,7 @@ struct OpenTitan {
     >,
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<lowrisc::i2c::I2c<'static>>,
     pm : &'static capsules::vpp::pmsyscall::ProcessManager,
-     //vpmdriver: &'static capsules::vpp::ProcessManagerConsoleCap::VPMDriver,
+     vpmdriver: &'static capsules::vpp::ProcessManagerConsoleCap::VPMDriver,
     // testdriver: &'static capsules::vpp::SubTest::Test,
 }
 
@@ -86,12 +86,12 @@ impl Platform for OpenTitan {
         match driver_num {
             // 0x9000A => f(Some(self.testdriver)),
             0x90003 => f(Some(self.pm)),
-            // 0x90004 => f(Some(self.vpmdriver)),
+            0x90004 => f(Some(self.vpmdriver)),
             capsules::led::DRIVER_NUM => f(Some(self.led)),
             capsules::hmac::DRIVER_NUM => f(Some(self.hmac)),
             capsules::gpio::DRIVER_NUM => f(Some(self.gpio)),
             capsules::console::DRIVER_NUM => f(Some(self.console)),
-            kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
+            //kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::low_level_debug::DRIVER_NUM => f(Some(self.lldb)),
             capsules::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
@@ -114,7 +114,7 @@ pub unsafe fn reset_handler() {
     // initialize capabilities
     let process_mgmt_cap = create_capability!(capabilities::ProcessManagementCapability);
     let memory_allocation_cap = create_capability!(capabilities::MemoryAllocationCapability);
-    let grant_cap = create_capability!(capabilities::MemoryAllocationCapability);
+    let _grant_cap = create_capability!(capabilities::MemoryAllocationCapability);
     let main_loop_cap = create_capability!(capabilities::MainLoopCapability);
 
     let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
@@ -144,9 +144,9 @@ pub unsafe fn reset_handler() {
     uart_mux.initialize();
     // Setup the console.
     let console = components::console::ConsoleComponent::new(board_kernel, uart_mux).finalize(());
-    let process_console =
-       components::process_console::ProcessConsoleComponent::new(board_kernel, uart_mux)
-       .finalize(());
+    // let process_console =
+    //    components::process_console::ProcessConsoleComponent::new(board_kernel, uart_mux)
+    //    .finalize(());
 
     // Create the debugger object that handles calls to `debug!()`.
     components::debug_writer::DebugWriterComponent::new(uart_mux).finalize(());
@@ -291,7 +291,7 @@ pub unsafe fn reset_handler() {
     // testdriver.trigger_callback();
 
 
-    process_console.start();
+    //process_console.start();
     //vpp_process_console.start();
 
     // let vpp_process_con = capsules::vpp::ProcessManagerConsoleCap::ProcessConsoleComponent::new(board_kernel,uart_mux);
@@ -304,19 +304,6 @@ pub unsafe fn reset_handler() {
     // vpp_process_component.start();
     debug!("OpenTitan initialisation complete. Entering main loop");
 
-    let opentitan = OpenTitan {
-        gpio: gpio,
-        led: led,
-        console: console,
-        ipc: kernel::ipc::IPC::new(board_kernel,&grant_cap),
-        alarm: alarm,
-        hmac,
-        lldb: lldb,
-        //usb,
-        i2c_master,
-        pm,
-        // vpmdriver,
-    };
 
     // USB support is currently broken in the OpenTitan hardware
     // See https://github.com/lowRISC/opentitan/issues/2598 for more details
@@ -334,16 +321,6 @@ pub unsafe fn reset_handler() {
         static _eappmem: u8;
     }
 
-
-    // let opentitan = OpenTitan {
-    //     gpio: gpio,
-    //     led: led,
-    //     console: console,
-    //     alarm: alarm,
-    //     hmac,
-    //     lldb: lldb,
-    //     i2c_master,
-    // };
 
     let app_flash = core::slice::from_raw_parts(
         &_sapps as *const u8,
@@ -373,21 +350,35 @@ pub unsafe fn reset_handler() {
     // capsules::vpp::ProcessManagerConsole::VPMDriver::new(vpp_process_console));
 
 
+    let vpp_process_con = capsules::vpp::ProcessManagerConsoleCap::ProcessConsoleComponent::new(board_kernel,uart_mux);
+    let vpp_process_component = vpp_process_con.finalize(());
+    // vpp_process_component.start();
+
+    let vpmdriver = static_init!(
+    capsules::vpp::ProcessManagerConsoleCap::VPMDriver,
+    capsules::vpp::ProcessManagerConsoleCap::VPMDriver::new(vpp_process_component)) ;
+    vpp_process_component.start();
 
 
-   // Intantiating VPM console without Syscall driver using Compoenents
-   //  let vpp_process_console=
-   //      components::vpm_no_cap::ProcessConsoleComponent::new(board_kernel,uart_mux)
-   //          .finalize(());
-   // vpp_process_console.start();
-  //
-  // let vpmdriver = static_init!(capsules::vpp::ProcessManagerConsole::VPMDriver,
-  // capsules::vpp::ProcessManagerConsole::VPMDriver::new(vpp_process_console));
+    let opentitan = OpenTitan {
+        gpio: gpio,
+        led: led,
+        console: console,
+        //ipc: kernel::ipc::IPC::new(board_kernel,&grant_cap),
+        alarm: alarm,
+        hmac,
+        lldb: lldb,
+        //usb,
+        i2c_master,
+        pm,
+        vpmdriver,
+    };
 
 
 
 
 
     let scheduler = components::sched::priority::PriorityComponent::new(board_kernel).finalize(());
-    board_kernel.kernel_loop(&opentitan, chip, Some(&opentitan.ipc), scheduler, &main_loop_cap);
+    // board_kernel.kernel_loop(&opentitan, chip, Some(&opentitan.ipc), scheduler, &main_loop_cap);
+    board_kernel.kernel_loop(&opentitan, chip,None, scheduler, &main_loop_cap);
 }

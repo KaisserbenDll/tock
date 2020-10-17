@@ -260,8 +260,8 @@ pub enum MK_ERROR_e {
     /// Maximal error value
     MK_ERROR_MAX,
 }
-impl From<MK_ERROR_e> for u16 {
-    fn from (original: MK_ERROR_e) -> u16 {
+impl From<MK_ERROR_e> for usize {
+    fn from (original: MK_ERROR_e) -> usize {
         match original {
             MK_ERROR_e::MK_ERROR_NONE => 0 ,
             MK_ERROR_e::MK_ERROR_UNKNOWN_UUID => 1,

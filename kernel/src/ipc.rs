@@ -223,26 +223,22 @@ impl Driver for IPC {
         target_id: usize,
         slice: Option<AppSlice<Shared, u8>>,
     ) -> ReturnCode {
-        debug!("Testing _allow");
-        debug!("check args appid : {:?} targetid: {:?}",appid,target_id);
+        // debug!("Testing _allow");
+        // debug!("check args appid : {:?} targetid: {:?}",appid,target_id);
         if target_id == 0 {
             match slice {
                 Some(slice_data) => {
                     let ret = self.data.kernel.process_until(|p| {
                         let s = p.get_process_name().as_bytes();
-                        debug!("pkg name {:?} and len {:?}", s,s.len());
+                        debug!("Valid Process Name {:?} and len {:?}", s,s.len());
+                        //debug!("Valid Process Name {:?}", s);
                         // are slices equal?
-                        debug!("slice is {:?} and len {:?}",
-                               slice_data.iter().map(|x| debug!("slice_data {:?}", x)),slice_data.len());
-                        debug!("length slice is {:?} and len slice found {:?}",s.len(),slice_data.len());
+                        let x = slice_data.iter().as_slice();
+                        debug!("Slice data {:?} and len {:?}",x,x.len());
+                        //debug!("length slice is {:?} and len slice found {:?}",s.len(),slice_data.len());
 
                         if s.len() == slice_data.len()
-                            && s.iter().zip(slice_data.iter()).all(|(c1, c2)|{
-
-                            debug!("byte1 {:?} , byte 2 {:?}", c1, c2);
-                            c1 == c2
-                        })
-
+                            && s.iter().zip(slice_data.iter()).all(|(c1, c2)|{c1 == c2})
                         {  debug!("led_service_id {:?} ",p.appid().id() as usize );
                             ReturnCode::SuccessWithValue {
                                 value: (p.appid().id() as usize) + 1,
