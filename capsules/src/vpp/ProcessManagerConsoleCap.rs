@@ -33,6 +33,8 @@ use kernel::hil;
 use kernel::procs::{FunctionCall,FunctionCallSource,Task};
 use crate::vpp::mloi::VppState::RUNNING;
 use core::convert::TryInto;
+use crate::vpp::mailbox::mbox;
+use core::borrow::{BorrowMut, Borrow};
 
 pub const DRIVER_NUM: usize = 0x90004 ;
 
@@ -79,23 +81,20 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a, C> {
         rx_buffer: &'static mut [u8],
         cmd_buffer: &'static mut [u8],
         kernel: &'static Kernel,
-         capability : C  // unused for the moment. Trying to find a workaround this.
-    )
-        -> VppProcessManager<'a,C> {
-        // add if condition to see if processes exit.
+         capability : C
+    ) -> VppProcessManager<'a,C> {
+
         let tockprocesses = kernel.processes;
-        // debug!("Name of First Process {:?}",
-        //        tockprocesses[0].unwrap().get_process_name());
         let mut vppprocesses:[Option<VppProcess>;NUM_PROCS] = Default::default();
-        // default initializes the array with None
+
+        let test_mb :&'static mbox = mbox::new(0, 0, 0);
+
         for i in 0..tockprocesses.len() {
             if tockprocesses[i].is_some(){
-                let proc = Some(process::VppProcess::create_vpp_process(tockprocesses[i], i as MK_Process_ID_u ));
+
+                let proc = Some(process::VppProcess::create_vpp_process(tockprocesses[i], i as MK_Process_ID_u, &test_mb));
                 vppprocesses[i] = proc;
-                // debug!("Syncing States");
-                // dummy variable
-                let process = &vppprocesses[i].clone().unwrap();
-                process.tockprocess.map(|proc| unsafe {
+                vppprocesses[i].unwrap().tockprocess.map(|proc| unsafe {
                     let ccb = FunctionCall {
                         source: FunctionCallSource::Kernel,
                         pc: 0x2003005c,
@@ -104,19 +103,13 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a, C> {
                         argument2: 0x1fb0,
                         argument3: 0x10004800,
                     };
-                proc.set_process_function(ccb);
-                proc.set_yielded_state();
-                proc.stop();
+                    proc.set_process_function(ccb);
+                    proc.set_yielded_state();
+                    proc.stop();
                 });
-                //process.sync_vpp_tock_states();
-                // vppprocesses[i].unwrap().sync_vpp_tock_states();
             }
         }
 
-        // For testing purposes. Leave them like this for now.
-        // vppprocesses[1] = None;
-        // vppprocesses[2] = None;
-        // The array should look like this [(Some(VppProcess, ID 0)), None, None, Some(VppProcess, ID 3))]
         VppProcessManager {
             uart,
             tx_in_progress: Cell::new(false),
@@ -133,20 +126,6 @@ impl <'a,C: ProcessManagementCapability> VppProcessManager<'a, C> {
             last_error: Cell::new(MK_ERROR_NONE)
         }
     }
-    // pub fn update (&mut self){
-    //     let tockprocesses = self.kernel.processes;
-    //     let mut vppprocesses:[Option<VppProcess>;NUM_PROCS] = Default::default();
-    //     for i in 0..tockprocesses.len() {
-    //         if tockprocesses[i].is_some(){
-    //             debug!("hellO");
-    //             let proc = Some(process::VppProcess::create_vpp_process(tockprocesses[i], i as MK_Process_ID_u ));
-    //             vppprocesses[i] = proc;
-    //         }
-    //     }
-    //     self.vpp_processes = vppprocesses;
-    //
-    //
-    // }
     // UART dedicated
     pub fn start(&self) -> ReturnCode {
         if self.running.get() == false {

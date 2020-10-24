@@ -868,6 +868,14 @@ impl Kernel {
                                     },
                                     |ipc| {
                                         ipc.schedule_callback(process.appid(), otherapp, ipc_type);
+                                        if config::CONFIG.trace_syscalls {
+                                            debug!(
+                                                "[{:?}] ipc_schedule with type from [{:?}] app  {:?}",
+                                                process.appid(),
+                                                otherapp,
+                                                ipc_type
+                                            );
+                                        }
                                     },
                                 );
                             }

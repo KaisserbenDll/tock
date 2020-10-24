@@ -234,7 +234,7 @@ impl Driver for IPC {
                         //debug!("Valid Process Name {:?}", s);
                         // are slices equal?
                         let x = slice_data.iter().as_slice();
-                        debug!("Slice data {:?} and len {:?}",x,x.len());
+                        debug!("Slice data         {:?} and len {:?}",x,x.len());
                         //debug!("length slice is {:?} and len slice found {:?}",s.len(),slice_data.len());
 
                         if s.len() == slice_data.len()

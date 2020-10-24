@@ -1603,7 +1603,8 @@ fn exceeded_check(size: usize, allocated: usize) -> &'static str {
 }
 
 impl<C: 'static + Chip> Process<'_, C> {
-    pub(crate) unsafe fn create(
+    // pub(crate) unsafe fn create(
+    pub unsafe fn create(
         kernel: &'static Kernel,
         chip: &'static C,
         app_flash: &'static [u8],

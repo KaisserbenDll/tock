@@ -1,13 +1,13 @@
-
 #![allow(unused_imports)]
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
-
+#![allow(non_snake_case)]
 use crate::vpp::mloi::*;
 use core::cell::Cell;
 use kernel::procs::{State, ProcessType, Process};
 use crate::vpp::mloi::VppState::*;
 use crate::vpp::mloi::MK_Process_ID_u;
+use crate::vpp::mailbox::mbox;
 
 #[derive(Clone)]
 pub struct VppProcess {
@@ -15,17 +15,20 @@ pub struct VppProcess {
     pub(crate) vppstate: Cell<VppState>,
     pub(crate) vpppriority: Cell<MK_PROCESS_PRIORITY_e>,
     pub(crate) vppid: Cell<MK_Process_ID_u>,
+    pub(crate) m_xKernel_Mailbox: Option<&'static mbox>,
 }
 
 impl  VppProcess{
-    // adding id as an argument for testing purposes. The id will be extracted from the firmware.
-    pub fn create_vpp_process(tockprocess: Option<&'static dyn ProcessType>, id :MK_Process_ID_u )
-        -> VppProcess{
+    pub fn create_vpp_process(
+        tockprocess: Option<&'static dyn ProcessType>,
+        pid : MK_Process_ID_u,
+        mailbox  : Option<&'static mbox> )-> VppProcess{
         VppProcess {
             tockprocess: tockprocess,
             vppstate: Cell::new(VppState::SUSPENDED_R),
             vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_NORMAL),
-            vppid: Cell::new(id)
+            vppid: Cell::new(pid),
+            m_xKernel_Mailbox: mailbox
         }
     }
 
@@ -52,24 +55,11 @@ impl  VppProcess{
             _ => {},
         }
     }
-    /*
 
-         pub(crate) fn sync_vpp_tock_states(&self) {
-        let vpp_state = self.vppstate.get();
-        let tock_process = self.tockprocess.unwrap().get_state()  ;
-        match vpp_state {
-            VppState::READY => {
-                match tock_state {
-
-                }
-            }
-            _ => {},
-        }
-    }
-    */
     pub(crate)fn get_vpp_id(&self) -> MK_Process_ID_u {
         self.vppid.get()
     }
+
     pub(crate) fn get_vpp_handle(&self) -> MK_HANDLE_t {
         self.vppid.get() as u32
     }
@@ -114,6 +104,7 @@ impl  VppProcess{
             _                 => {},
         }
     }
+
     pub(crate) fn set_vpp_id(&self, id :MK_Process_ID_u ) {
         self.vppid.set(id);
     }
