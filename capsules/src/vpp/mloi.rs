@@ -348,7 +348,7 @@ impl From<MK_EXCEPTION_e> for u16 {
 }
 
 /// 32-bit bitmap for Exception, Signal or LIB Descriptor conveyor
-
+pub type MK_BITMAP_t = u32;
 /// Enumerated Signal type (table 7-8)
 pub enum MK_SIGNAL_e{
     /// Timeout notification

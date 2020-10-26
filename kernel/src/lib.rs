@@ -99,7 +99,7 @@ pub mod ipc;
 pub mod syscall;
 
 mod callback;
-mod config;
+pub mod config;
 mod driver;
 mod grant;
 mod mem;
@@ -108,7 +108,7 @@ mod platform;
 mod process;
 mod returncode;
 mod sched;
-mod tbfheader;
+pub mod tbfheader;
 
 pub use crate::sched::ListenerType;
 pub use crate::sched::LISTENER;

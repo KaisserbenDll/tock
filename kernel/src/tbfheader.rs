@@ -17,7 +17,7 @@ macro_rules! align4 {
 
 /// Error when parsing just the beginning of the TBF header. This is only used
 /// when establishing the linked list structure of apps installed in flash.
-pub(crate) enum InitialTbfParseError {
+pub enum InitialTbfParseError {
     /// We were unable to parse the beginning of the header. This either means
     /// we ran out of flash, or the trusted values are invalid meaning this is
     /// just empty flash after the end of the last app. This error is fine, as
@@ -463,7 +463,7 @@ impl TbfHeader {
 /// Any other error we return an error and the length of the entire app so that
 /// we can skip over it and check for the next app.
 /// - Err(InitialTbfParseError::InvalidHeader(app_length))
-pub(crate) fn parse_tbf_header_lengths(
+pub fn parse_tbf_header_lengths(
     app: &'static [u8; 8],
 ) -> Result<(u16, u16, u32), InitialTbfParseError> {
     // Version is the first 16 bits of the app TBF contents. We need this to

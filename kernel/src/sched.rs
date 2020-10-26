@@ -870,10 +870,10 @@ impl Kernel {
                                         ipc.schedule_callback(process.appid(), otherapp, ipc_type);
                                         if config::CONFIG.trace_syscalls {
                                             debug!(
-                                                "[{:?}] ipc_schedule with type from [{:?}] app  {:?}",
+                                                "[{:?}] ipc_schedule with type [{:?}] from app[{:?}] ",
                                                 process.appid(),
+                                                ipc_type,
                                                 otherapp,
-                                                ipc_type
                                             );
                                         }
                                     },

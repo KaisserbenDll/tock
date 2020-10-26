@@ -4,10 +4,18 @@
 #![allow(non_snake_case)]
 use crate::vpp::mloi::*;
 use core::cell::Cell;
-use kernel::procs::{State, ProcessType, Process};
+use kernel::procs::{State, ProcessType, Process, FaultResponse, FunctionCall, FunctionCallSource, ProcessLoadError};
 use crate::vpp::mloi::VppState::*;
 use crate::vpp::mloi::MK_Process_ID_u;
 use crate::vpp::mailbox::mbox;
+use crate::vpp::ipc::ipc;
+use kernel::{Kernel, Chip, config};
+use kernel::capabilities::ProcessManagementCapability;
+use core::convert::TryInto;
+use kernel::tbfheader;
+use crate::vpp;
+use kernel::{debug, static_init};
+use crate::vpp::vppkernel::NUM_PROCS;
 
 #[derive(Clone)]
 pub struct VppProcess {
@@ -16,19 +24,201 @@ pub struct VppProcess {
     pub(crate) vpppriority: Cell<MK_PROCESS_PRIORITY_e>,
     pub(crate) vppid: Cell<MK_Process_ID_u>,
     pub(crate) m_xKernel_Mailbox: Option<&'static mbox>,
+    pub(crate) ipc: Option<&'static ipc>
+}
+/// This is a replication of `load_processes` function by tock with the addition of VPP
+/// Process specification. It returns an array `procs` of VPP Processes.
+pub unsafe fn  load_vpp_processes<C: Chip>(
+    kernel: &'static Kernel,
+    chip: &'static C,
+    // app_flash: &'static [u8],
+    // app_memory: &'static mut [u8],
+    tock_procs: &'static mut [Option<&'static dyn ProcessType>],
+    vpp_procs : &'static mut [Option<VppProcess>;NUM_PROCS],
+    fault_response: FaultResponse,
+    _capability: &dyn ProcessManagementCapability)
+    -> Result<(), ProcessLoadError> {
+    // I am importing these symbole to calculate SRAM and FLASH Addresses from the main function
+    /// These symbols are defined in the linker script.
+    /// These variables refer to the start and length of SRAM and FLASH Addresses.
+    /// They are used in load_processes function to parse the TBF header and
+    /// create Tock Processes based on that header.
+    ///
+    /// app_flash refers to the address slice, where the TBF Header is first located
+    /// and the first entry point function. The first entry point is defined in libtock-c
+    /// in ctr0.c
+    extern "C" {
+        /// Beginning of the ROM region containing app images.
+        static _sapps: u8;
+        /// End of the ROM region containing app images.
+        static _eapps: u8;
+        /// Beginning of the RAM region for app memory.
+        static mut _sappmem: u8;
+        /// End of the RAM region for app memory.
+        static _eappmem: u8;
+    }
+    let app_flash = core::slice::from_raw_parts(
+        &_sapps as *const u8,
+        &_eapps as *const u8 as usize - &_sapps as *const u8 as usize);
+    let app_memory =  core::slice::from_raw_parts_mut(
+        &mut _sappmem as *mut u8,
+        &_eappmem as *const u8 as usize - &_sappmem as *const u8 as usize,
+    );
+
+
+    if config::CONFIG.debug_load_processes {
+        debug!(
+            "Loading processes from flash={:#010X}-{:#010X} into sram={:#010X}-{:#010X}",
+            app_flash.as_ptr() as usize,
+            app_flash.as_ptr() as usize + app_flash.len() - 1,
+            app_memory.as_ptr() as usize,
+            app_memory.as_ptr() as usize + app_memory.len() - 1
+        );
+    }
+
+    let mut remaining_flash = app_flash;
+    let mut remaining_memory = app_memory;
+
+    for i in 0..vpp_procs.len(){
+        // Get the first eight bytes of flash to check if there is another
+        // app.
+        let test_header_slice = match remaining_flash.get(0..8) {
+            Some(s) => s,
+            None => {
+                // Not enough flash to test for another app. This just means
+                // we are at the end of flash, and there are no more apps to
+                // load.
+                return Ok(());
+            }
+        };
+        // Pass the first eight bytes to tbfheader to parse out the length of
+        // the tbf header and app. We then use those values to see if we have
+        // enough flash remaining to parse the remainder of the header.
+        let (version, header_length, entry_length) = match tbfheader::parse_tbf_header_lengths(
+            test_header_slice
+                .try_into()
+                .or(Err(ProcessLoadError::InternalError))?,
+        ) {
+            Ok((v, hl, el)) => (v, hl, el),
+            Err(tbfheader::InitialTbfParseError::InvalidHeader(entry_length)) => {
+                // If we could not parse the header, then we want to skip over
+                // this app and look for the next one.
+                (0, 0, entry_length)
+            }
+            Err(tbfheader::InitialTbfParseError::UnableToParse) => {
+                // Since Tock apps use a linked list, it is very possible the
+                // header we started to parse is intentionally invalid to signal
+                // the end of apps. This is ok and just means we have finished
+                // loading apps.
+                return Ok(());
+            }
+        };
+
+        // Now we can get a slice which only encompasses the length of flash
+        // described by this tbf header.  We will either parse this as an actual
+        // app, or skip over this region.
+        let entry_flash = remaining_flash
+            .get(0..entry_length as usize)
+            .ok_or(ProcessLoadError::NotEnoughFlash)?;
+
+        // Advance the flash slice for process discovery beyond this last entry.
+        // This will be the start of where we look for a new process since Tock
+        // processes are allocated back-to-back in flash.
+        remaining_flash = remaining_flash
+            .get(entry_flash.len()..)
+            .ok_or(ProcessLoadError::NotEnoughFlash)?;
+
+        // Need to reassign remaining_memory in every iteration so the compiler
+        // knows it will not be re-borrowed.
+        remaining_memory = if header_length > 0 {
+            // If we found an actual app header, try to create a `Process`
+            // object. We also need to shrink the amount of remaining memory
+            // based on whatever is assigned to the new process if one is
+            // created.
+
+            // Try to create a process object from that app slice. If we don't
+            // get a process and we didn't get a loading error (aka we got to
+            // this point), then the app is a disabled process or just padding.
+            let (process_option, unused_memory) =
+                Process::create(
+                    kernel,
+                    chip,
+                    entry_flash,
+                    header_length as usize,
+                    version,
+                    remaining_memory,
+                    fault_response,
+                    i,
+                )?;
+
+            process_option.map(|process| {
+                if config::CONFIG.debug_load_processes {
+                    debug!(
+                        "Loaded process[{}] from flash={:#010X}-{:#010X} into sram={:#010X}-{:#010X} = {:?}",
+                        i,
+                        entry_flash.as_ptr() as usize,
+                        entry_flash.as_ptr() as usize + entry_flash.len() - 1,
+                        process.mem_start() as usize,
+                        process.mem_end() as usize - 1,
+                        process.get_process_name()
+                    );
+                }
+                tock_procs[i] = Some(process);
+                let mailbox= static_init!(vpp::mailbox::mbox,
+                vpp::mailbox::mbox::new(0,i,i+1));
+                let ipc = static_init!(vpp::ipc::ipc,
+                vpp::ipc::ipc::new(0,64,0,1));
+
+                let vpp_process = VppProcess::create_vpp_process(
+                    tock_procs[i],
+                    i as MK_Process_ID_u,
+                    Some(mailbox),
+                    Some(ipc));
+                    //mailbox,
+                    //ipc);
+
+                // starting any process with the StoppedYielded State
+                /*vpp_process.tockprocess.map(|proc| {
+                    let ccb = FunctionCall {
+                        source: FunctionCallSource::Kernel,
+                        pc: 0x2003005c,
+                        argument0: 0x20030034,
+                        argument1: 0x10003c00,
+                        argument2: 0x1fb0,
+                        argument3: 0x10004800,
+                    };
+                    proc.set_process_function(ccb);
+                    proc.set_yielded_state();
+                    proc.stop();
+                });*/
+
+                // Save the reference to this process in the processes array.
+                vpp_procs[i] = Some(vpp_process);
+            });
+            unused_memory
+        } else {
+            // We are just skipping over this region of flash, so we have the
+            // same amount of process memory to allocate from.
+            remaining_memory
+        };
+    }
+    Ok(())
 }
 
 impl  VppProcess{
     pub fn create_vpp_process(
         tockprocess: Option<&'static dyn ProcessType>,
         pid : MK_Process_ID_u,
-        mailbox  : Option<&'static mbox> )-> VppProcess{
+        mailbox  : Option<&'static mbox>,
+        ipc : Option<&'static ipc>
+        )-> VppProcess{
         VppProcess {
             tockprocess: tockprocess,
             vppstate: Cell::new(VppState::SUSPENDED_R),
             vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_NORMAL),
             vppid: Cell::new(pid),
-            m_xKernel_Mailbox: mailbox
+            m_xKernel_Mailbox: mailbox,
+            ipc: ipc
         }
     }
 
@@ -108,6 +298,8 @@ impl  VppProcess{
     pub(crate) fn set_vpp_id(&self, id :MK_Process_ID_u ) {
         self.vppid.set(id);
     }
-
+    pub(crate) fn get_process_name(&self)-> &'static str{
+        self.tockprocess.unwrap().get_process_name()
+    }
 }
 

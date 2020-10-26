@@ -8,7 +8,7 @@ use crate::vpp::mloi::VppState::*;
 use kernel::common::RingBuffer;
 use crate::vpp::mloi::MK_ERROR_e::{MK_ERROR_NONE, MK_ERROR_UNKNOWN_PRIORITY, MK_ERROR_UNKNOWN_ID};
 
-#[derive(Clone)]
+//#[derive(Clone)]
 pub struct mbox {
     pub mailbox_id: Cell<MK_MAILBOX_ID_u>,
     owner_process_index: Cell<usize>, //tbc
@@ -30,7 +30,7 @@ impl  mbox {
     /*pub (crate) fn add_sig(&self, sig: MK_BITMAP_t ) {
         self.queue.enqueue(sig);
     }
-    pub (crate) fn clear_sig(&self) {
+    pub (crate) fn retrieve_last_sig(&self) -> MK_BITMAP_t{
         self.queue.last_element.dequeue();
     }
      */

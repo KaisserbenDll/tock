@@ -20,7 +20,8 @@ use kernel::Chip;
 use kernel::Platform;
 use kernel::{create_capability, debug, static_init};
 use rv32i::csr;
-
+use capsules::vpp::process::VppProcess;
+use capsules::vpp::vppkernel::VppKernel;
 #[allow(dead_code)]
 mod aes_test;
 
@@ -30,14 +31,13 @@ mod multi_alarm_test;
 pub mod io;
 pub mod usb;
 
-// Number of allowed process
-const NUM_PROCS: usize =4;
+use capsules::vpp::vppkernel::NUM_PROCS;
 
-//
 // Actual memory for holding the active process structures. Need an empty list
 // at least.
 static mut PROCESSES: [Option<&'static dyn kernel::procs::ProcessType>; NUM_PROCS] =
     [None;NUM_PROCS];
+static mut VPP_PROCESSES: [Option<VppProcess>;NUM_PROCS] = [None;NUM_PROCS];
 
 static mut CHIP: Option<
     &'static earlgrey::chip::EarlGrey<VirtualMuxAlarm<'static, earlgrey::timer::RvTimer>>,
@@ -118,6 +118,8 @@ pub unsafe fn reset_handler() {
     let main_loop_cap = create_capability!(capabilities::MainLoopCapability);
 
     let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
+    let _vpp_kernel = static_init!(VppKernel,VppKernel::new(&VPP_PROCESSES,board_kernel));
+
 
     let dynamic_deferred_call_clients =
         static_init!([DynamicDeferredCallClientState; 1], Default::default());
@@ -291,17 +293,10 @@ pub unsafe fn reset_handler() {
     // testdriver.trigger_callback();
 
 
-    // process_console.start();
-    //vpp_process_console.start();
+    // let vpp_process_console = capsules::vpp::ProcessManagerConsoleCap
+    // ::ProcessConsoleComponent::new(vpp_kernel,uart_mux)
+    //     .finalize(());
 
-    // let vpp_process_con = capsules::vpp::ProcessManagerConsoleCap::ProcessConsoleComponent::new(board_kernel,uart_mux);
-    // let vpp_process_component = vpp_process_con.finalize(());
-    // // vpp_process_component.start();
-    //
-    // let vpmdriver = static_init!(
-    // capsules::vpp::ProcessManagerConsoleCap::VPMDriver,
-    // capsules::vpp::ProcessManagerConsoleCap::VPMDriver::new(vpp_process_component)) ;
-    // vpp_process_component.start();
     debug!("OpenTitan initialisation complete. Entering main loop");
 
     let opentitan = OpenTitan {
@@ -315,46 +310,25 @@ pub unsafe fn reset_handler() {
         //usb,
         i2c_master,
         pm,
-        // vpmdriver,
     };
     // USB support is currently broken in the OpenTitan hardware
     // See https://github.com/lowRISC/opentitan/issues/2598 for more details
     // let usb = usb::UsbComponent::new(board_kernel).finalize(());
 
-    /// These symbols are defined in the linker script.
-    extern "C" {
-        /// Beginning of the ROM region containing app images.
-        static _sapps: u8;
-        /// End of the ROM region containing app images.
-        static _eapps: u8;
-        /// Beginning of the RAM region for app memory.
-        static mut _sappmem: u8;
-        /// End of the RAM region for app memory.
-        static _eappmem: u8;
-    }
-
-
-    let app_flash = core::slice::from_raw_parts(
-        &_sapps as *const u8,
-        &_eapps as *const u8 as usize - &_sapps as *const u8 as usize);
-    let app_memory =  core::slice::from_raw_parts_mut(
-        &mut _sappmem as *mut u8,
-        &_eappmem as *const u8 as usize - &_sappmem as *const u8 as usize,
-    );
-    kernel::procs::load_processes(
+    capsules::vpp::process::load_vpp_processes(
         board_kernel,
         chip,
-        app_flash,
-        app_memory,
+        // app_flash,
+        // app_memory,
         &mut PROCESSES,
+        &mut VPP_PROCESSES,
         FAULT_RESPONSE,
-        &process_mgmt_cap,
-    )
-    .unwrap_or_else(|err| {
-        debug!("Error loading processes!");
-        debug!("{:?}", err);
-    });
-
+        &process_mgmt_cap)
+         .unwrap_or_else(|err| {
+             debug!("Error loading processes!");
+             debug!("{:?}", err);
+         });
+    debug!("Process state {:?}", PROCESSES[0].unwrap().get_state());
 
     // let vpp_process_console= components::vpm_no_cap::ProcessConsoleComponent::new(board_kernel,uart_mux)
     //     .finalize(());
@@ -380,5 +354,4 @@ pub unsafe fn reset_handler() {
 
     let scheduler = components::sched::priority::PriorityComponent::new(board_kernel).finalize(());
     board_kernel.kernel_loop(&opentitan, chip, Some(&opentitan.ipc), scheduler, &main_loop_cap);
-    // board_kernel.kernel_loop(&opentitan, chip,None, scheduler, &main_loop_cap);
 }

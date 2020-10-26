@@ -34,19 +34,20 @@ use kernel::procs::{FunctionCall,FunctionCallSource,Task};
 use crate::vpp::mloi::VppState::RUNNING;
 use core::convert::TryInto;
 use crate::vpp::mailbox::mbox;
+use crate::vpp::mloi::MK_SIGNAL_e::MK_SIGNAL_ERROR;
 
 pub const DRIVER_NUM: usize = 0x90015 ;
-const NUM_PROCS: usize = 4 ; // Number of allowed vpp processes.
+pub const NUM_PROCS: usize = 4 ; // Number of allowed vpp processes.
 
 pub struct VppKernel{
-    vpp_processes: &'static [Option<VppProcess>;NUM_PROCS],
-    kernel: &'static Kernel,
-    last_error: Cell<MK_ERROR_e>
+    pub(crate) vpp_processes: &'static [Option<VppProcess>;NUM_PROCS],
+    pub(crate) kernel: &'static Kernel,
+    pub(crate) last_error: Cell<MK_ERROR_e>
 }
 
 impl  VppKernel {
-    pub fn  new(procs: &'static mut [Option<VppProcess>;NUM_PROCS],
-        tock_kernel: &'static mut Kernel) -> VppKernel{
+    pub fn  new(procs: &'static [Option<VppProcess>;NUM_PROCS],
+        tock_kernel: &'static Kernel) -> VppKernel{
         VppKernel {
             vpp_processes: procs,
             kernel: tock_kernel,
@@ -152,8 +153,6 @@ impl  VppKernel {
         // or wrap this with an Option.
     }
 
-    // Concerning Priorities there is another missing function that needs to be implemented.
-    // Based on the index of Tock Processes, Vpp Priorities are mapped accordingly.
 
     pub (crate) fn _mk_get_process_priority(& self, _hProcess: MK_HANDLE_t) -> MK_PROCESS_PRIORITY_e {
         let process = self.get_process_ref_internal(_hProcess);
@@ -169,7 +168,8 @@ impl  VppKernel {
         }
     }
 
-
+    // Concerning Priorities there is another missing function that needs to be implemented.
+    // Based on the index of Tock Processes, Vpp Priorities are mapped accordingly.
     pub (crate) fn _mk_set_process_priority(&self, _hProcess: MK_HANDLE_t,_xPriority: MK_PROCESS_PRIORITY_e) -> MK_ERROR_e {
 
         // Check for UNKNOWN_PRIORITY by figuring out the encoding of the enum in rust
@@ -256,9 +256,9 @@ impl  VppKernel {
     }
 
     // 3) Mailbox Management
-    /// Helper function to get a reference to a valid Mailbox  based on a handle. It returns
-    /// `None` if the handle is not found.
-    pub fn Get_Mailbox_ref_internal(&self, handle: MK_HANDLE_t) -> Option<&mbox> {
+    ///// Helper function to get a reference to a valid Mailbox  based on a handle. It returns
+    ///// `None` if the handle is not found.
+   /* pub fn Get_Mailbox_ref_internal(&self, handle: MK_HANDLE_t) -> Option<&mbox> {
         let MailboxID = convert_handle_to_mbid(handle);
         let mut return_pointer: Option<&mbox> = None ;
         for process in self.vpp_processes.iter() {
@@ -299,13 +299,16 @@ impl  VppKernel {
     /// of Signal values and there is no priority among Signals as to the order of their arrival
     /// within the Mailbox.
     pub fn _mk_Send_Signal(&self,_hMailbox: MK_HANDLE_t,_eSignal: MK_SIGNAL_e) ->  MK_ERROR_e{
-        let mailbox = self.Get_Mailbox_ref_internal(_hMailbox);
+       /* let mailbox = self.Get_Mailbox_ref_internal(_hMailbox);
+
         if mailbox.is_some() {
             mailbox.unwrap().add_sig(_eSignal);
             MK_ERROR_NONE
         } else
         {MK_ERROR_UNKNOWN_HANDLE }
+        */
 
+        unimplemented!()
     }
     /// Wait for a Signal on a Mailbox
     /// This function waits for a Signal on one or any Mailboxes of the caller Process,
@@ -327,11 +330,22 @@ impl  VppKernel {
     /// This function gets a Signal on a Mailbox. A Process can only retrieve the Signal
     /// from its own Mailbox. The _mk_Get_Signal should be repeatedly called until 0 is returned.
     /// The pending Signals are cleared once they have been read.
-    pub fn _mk_Get_Signal(&self, _hMailbox: MK_HANDLE_t) -> MK_SIGNAL_e {
-
+    pub fn _mk_Get_Signal(&self, _hMailbox: MK_HANDLE_t) -> Option<MK_BITMAP_t> {
+        /*let mailbox = self.Get_Mailbox_ref_internal(_hMailbox);
+        if mailbox.is_some() {
+            let sig = mailbox.unwrap().retrieve_last_sig();
+            Some(sig)
+        } else {
+            // This is a problem => self.last_error.set(MK_SIGNAL_ERROR);
+            None
+        }*/
+    unimplemented!()
     }
+    pub (crate) fn handle_signals(&self,_eSignal:MK_BITMAP_t){
 
-
+    unimplemented!()
+    }
+*/
     // 4) IPC Management
     // 5) VRE Management
     // 6) Firmware Management
