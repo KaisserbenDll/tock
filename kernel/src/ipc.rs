@@ -230,16 +230,16 @@ impl Driver for IPC {
                 Some(slice_data) => {
                     let ret = self.data.kernel.process_until(|p| {
                         let s = p.get_process_name().as_bytes();
-                        debug!("Valid Process Name {:?} and len {:?}", s,s.len());
+                        // debug!("Valid Process Name {:?} and len {:?}", s,s.len());
                         //debug!("Valid Process Name {:?}", s);
                         // are slices equal?
-                        let x = slice_data.iter().as_slice();
-                        debug!("Slice data         {:?} and len {:?}",x,x.len());
+                        let _x = slice_data.iter().as_slice();
+                        // debug!("Slice data         {:?} and len {:?}",x,x.len());
                         //debug!("length slice is {:?} and len slice found {:?}",s.len(),slice_data.len());
 
                         if s.len() == slice_data.len()
                             && s.iter().zip(slice_data.iter()).all(|(c1, c2)|{c1 == c2})
-                        {  debug!("led_service_id {:?} ",p.appid().id() as usize );
+                        {  //debug!("led_service_id {:?} ",p.appid().id() as usize );
                             ReturnCode::SuccessWithValue {
                                 value: (p.appid().id() as usize) + 1,
 
@@ -248,7 +248,7 @@ impl Driver for IPC {
                             ReturnCode::FAIL
                         }
                     });
-                    debug!("Returns {:?}", ret);
+                    // debug!("Returns {:?}", ret);
                     if ret != ReturnCode::FAIL {
                         return ret;
                     }
@@ -271,6 +271,8 @@ impl Driver for IPC {
                         data.shared_memory.get_mut(i).map_or(
                             ReturnCode::EINVAL, /* Target process does not exist */
                             |smem| {
+                                let tmp = slice.as_ref().unwrap().ptr();
+                                debug!("Address shared buff {:?}",tmp);
                                 *smem = slice;
                                 ReturnCode::SUCCESS
                             },

@@ -63,76 +63,44 @@ impl fmt::Debug for VPP_FRW_TYPE_e {
 pub(crate) type MK_Index_t = u16 ;
 
 /// Execution Domain Types (Table 7-3)
-#[repr(u16)]
 pub(crate) enum MK_EXECUTION_DOMAIN_TYPE_e {
     /// System VPP Execution Domain
     MK_EXECUTION_DOMAIN_TYPE_VPP ,
     /// VPP Application Execution Domain
     MK_EXECUTION_DOMAIN_TYPE_APP  ,
 }
-impl MK_EXECUTION_DOMAIN_TYPE_e {
-    ///  The `value` function converts the enum `MK_EXECUTION_DOMAIN_TYPE_e` to
-    /// the associated values
-    pub  fn value(&self) -> u16 {
-        match *self {
-            MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP => 0b10_u16,
-            MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP => 0b01_u16,
 
+impl From<MK_EXECUTION_DOMAIN_TYPE_e> for u16 {
+    fn from(original: MK_EXECUTION_DOMAIN_TYPE_e) -> Self {
+        match original {
+            MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP => 0x0002_u16,
+            MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP => 0x0001_u16,
         }
-    }
-    /// The `convert` function does the opposite of what the `value` function does.
-    /// It converts the values associated with the enum `MK_EXECUTION_DOMAIN_TYPE_e`
-    /// to the domain type (App or Vpp)
-    pub  fn convert(value: u16) -> Option<MK_EXECUTION_DOMAIN_TYPE_e> {
-        match value {
-            0b10_u16 => Some(MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP),
-            0b01_u16 => Some(MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP),
-            _ => None
-        }
-
     }
 }
-
-
-
-// trait Kernel_Object_Type <T>{
-//     fn new(id_e: T, exec_domain: MK_EXECUTION_DOMAIN_TYPE_e) -> Box<Self> {
-//         id_e & (MK_EXECUTION_DOMAIN_TYPE_e::value(&exec_domain)<<14)
-//     }
-//     fn get_id (&self) -> T {
-//         0b0011_1111_1111_1111_u16 & self
-//     }
-//     fn get_exdomain (&self) -> MK_EXECUTION_DOMAIN_TYPE_e {
-//         MK_EXECUTION_DOMAIN_TYPE_e::convert(self >>14).unwrap()
-//     }
-//     fn set_id (&self ,id_e: T) -> Box<Self> {
-//         (  self & 0xC000_u16)  | id_e
-//     }
-//     fn set_exdomain (&self , exec_domain: MK_EXECUTION_DOMAIN_TYPE_e) -> Box<Self> {
-//         (self & 0x3FFF_u16 )| MK_EXECUTION_DOMAIN_TYPE_e::value(&exec_domain)
-//     }
-// }
+/// This macro takes two arguments:
+/// 1) The first argument is the execution domain type as u16
+/// 2) The second argument is the Enumerated identifier
+/// and returns a composite identifier. This macro should be used to generate all composite
+/// identifiers used in the VPP standard (Table 7-2 + Table 7-13)
+///
+/// Since there is no need to use the MK_EXECUTION_DOMAIN_TYPE enum every time this macro is
+/// called, i tried to call it with 1 for APP and 2 for VPP execution domain types.
+    macro_rules! composite_id {
+        ($x:expr,$y:expr) => {(($y as u16) & 0x3FFF) | (($x as u16) << 14)} //(($x as u16) << 14) |
+    }
 
 /// Composite Identifier of an IPC (Table 7-2)
 pub type MK_IPC_ID_u = u16;
-pub type MK_IPC_ID_e = u16;
-
-//impl Kernel_Object_Type<MK_IPC_ID_e> for MK_IPC_ID_u {}
-
+pub fn convert_ipcID_to_handle(_eIPCID: MK_IPC_ID_u) -> MK_HANDLE_t {_eIPCID as u32}
+pub fn convert_handle_to_ipcID(handle: MK_HANDLE_t) -> MK_IPC_ID_u {handle as u16}
 /// Composite Identifier of a Mailbox (Table 7-2)
 pub type MK_MAILBOX_ID_u = u16 ;
-pub type MK_MAILBOX_ID_e = u16 ;
-//impl Kernel_Object_Type<MK_MAILBOX_ID_e> for MK_MAILBOX_ID_u {}
 pub fn convert_mbid_to_handle(_eMailboxID: MK_MAILBOX_ID_u) -> MK_HANDLE_t{_eMailboxID as u32}
 pub fn convert_handle_to_mbid(handle: MK_HANDLE_t) -> MK_MAILBOX_ID_u{handle as u16}
-
 /// Composite Identifier of a Process (Table 7-2)
-pub type MK_Process_ID_u= u16 ;
-pub type MK_Process_ID_e= u16 ;
-//impl Kernel_Object_Type<MK_PROCESS_ID_e> for MK_PROCESS_ID_u {}
-pub fn convert_to_handle(id: MK_Process_ID_u) -> MK_HANDLE_t{
-    id as u32
-}
+pub type MK_Process_ID_u = u16;
+pub fn convert_to_handle(id: MK_Process_ID_u) -> MK_HANDLE_t{id as u32}
 pub fn convert_to_id(handle: MK_HANDLE_t) -> MK_Process_ID_u{handle as u16}
 
 
@@ -182,7 +150,6 @@ impl fmt::Debug for MK_PROCESS_PRIORITY_e {
 /// Composite Identifier of a shared library (Table 7-2)
 pub type MK_LIB_ID_u = u16 ;
 pub type MK_LIB_ID_e = u16 ;
-//impl Kernel_Object_Type<MK_LIB_ID_e> for MK_LIB_ID_u {}
 
 /// VRE Identifiers (Table 7-5)
 pub enum MK_VRE_e{
@@ -317,8 +284,6 @@ impl fmt::Debug for MK_ERROR_e {
     }
 }
 
-
-
 /// Exceptions (Table 7-11)
 pub enum MK_EXCEPTION_e {
     /// An error has occured in a child of the Process
@@ -392,7 +357,6 @@ pub enum MK_SIGNAL_e{
 }
 
 impl From<MK_SIGNAL_e> for u32 {
-
     fn from(original: MK_SIGNAL_e) -> u32 {
         match original {
             MK_SIGNAL_e::MK_SIGNAL_TIME_OUT =>       0x0000_0001_u32,
@@ -518,7 +482,7 @@ pub (crate) const MK_IPC_DOMAIN_BASE_ID : u8 = 100;
 // const MK_IPC_COM_LENGTH: u8 =
 
 /// Maximal number of IPC descriptors per Firmware
-pub (crate) const MK_IPC_LIMIT : u8 = 64 ;
+pub  const MK_IPC_LIMIT : usize = 64 ;
 
 /// Maximal enumerated IPC identifier value within the
 /// scope of an Execution Domain (including MAX_ID)
@@ -548,7 +512,7 @@ const MK_MAILBOX_DOMAIN_BASE_ID : u8 = 100 ;
 
 ///Maximal number of Mailbox descriptors per Firmware
 /// excluding the kernel Mailbox
-pub (crate) const MK_MAILBOX_LIMIT : usize = 64 ;
+pub const MK_MAILBOX_LIMIT : usize = 64 ;
 
 /// Maximal enumerated Mailbox identifier value within
 /// the scope of a domain (including MAX_ID)
@@ -596,59 +560,35 @@ pub (crate) const MK_MAX_PROCESS_ID : u16 = 0x3FFF ;
 /// StackType_t units
 pub (crate) const MK_MIN_SUPPORTED_STACK : u16 = 512 ; // 512 StackType_t units (2KB if 32bit)
 
-
-
 // Cross-Execution Domain Composite Identifiers (Table 7-13)
 
 // Cross-Execution-Domain IPCs and Mailbox descriptors are automatically
 // instantiated by the kernel. As such,they cannot be defined in by
 // Firmware. Their ID and IPC size are fixed.
-//
-// /// VPP COM Process Cross-Execution Domain Composite Identifier
-// const MK_PROCESS_COM_VPP_ID : dyn Kernel_Object_Type<MK_PROCESS_ID_e>
-// = Kernel_Object_Type::new(0, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP);
-//
-// /// MGT Process Cross-Execution Domain Composite Identifier
-// const MK_PROCESS_MGT_VPP_ID : dyn Kernel_Object_Type<MK_PROCESS_ID_e>
-// = Kernel_Object_Type::new(1, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP) ;
-//
-// /// Main Process Cross-Execution Domain Composite Identifier
-// const MK_PROCESS_APP_ID :dyn  Kernel_Object_Type<MK_PROCESS_ID_e> =
-// Kernel_Object_Type::new(0, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP) ;
-//
-// /// Com Process Mailbox (sender: Main Process)
-// const MK_MAILBOX_COM_MAIN_ID : dyn Kernel_Object_Type<MK_MAILBOX_ID_e> =
-// Kernel_Object_Type::new(0, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP) ;
-//
-// /// MGT Process Mailbox (sender: Main Process)
-// const MK_MAILBOX_MGT_MAIN_ID : dyn Kernel_Object_Type<MK_MAILBOX_ID_e> =
-// Kernel_Object_Type::new(1, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP);
-//
-// /// Main Process Mailbox (sender: COM Process)
-// const MK_MAILBOX_MAIN_COM_ID : dyn Kernel_Object_Type<MK_MAILBOX_ID_e> =
-// Kernel_Object_Type::new(0, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP);
-//
-// /// Main Process Mailbox (sender: COM Process)
-// const MK_MAILBOX_MAIN_MGT_ID : dyn Kernel_Object_Type<MK_MAILBOX_ID_e> =
-// Kernel_Object_Type::new(1, MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP);
-//
-// /// IPC from the Main Process to the COM Process
-// const MK_IPC_MAIN_COM_ID : dyn Kernel_Object_Type<MK_IPC_ID_e> =
-// Kernel_Object_Type::new(0,MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP);
-//
-// /// IPC from the COM Process to the Main Process
-// const MK_IPC_COM_MAIN_ID : dyn Kernel_Object_Type<MK_IPC_ID_e> =
-// Kernel_Object_Type::new(0,MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP);
-//
-// /// IPC from the Main Process to the MGT Process
-// /// (for SYSTEM VPP APP)
-// const MK_IPC_MAIN_MGT_ID : dyn Kernel_Object_Type<MK_IPC_ID_e> =
-// Kernel_Object_Type::new(1,MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_APP);
-//
-// /// IPC from the MGT Process to the Main Process
-// ///(for SYSTEM VPP APP)
-// const MK_IPC_MGT_MAIN_ID : dyn Kernel_Object_Type<MK_IPC_ID_e> =
-// Kernel_Object_Type::new(1,MK_EXECUTION_DOMAIN_TYPE_e::MK_EXECUTION_DOMAIN_TYPE_VPP);
+
+/// VPP COM Process Cross-Execution Domain Composite Identifier
+pub(crate) const MK_PROCESS_COM_VPP_ID : MK_Process_ID_u = composite_id!(2,0);
+/// MGT Process Cross-Execution Domain Composite Identifier
+pub(crate) const MK_PROCESS_MGT_VPP_ID : MK_Process_ID_u = composite_id!(2,1);
+/// Main Process Cross-Execution Domain Composite Identifier
+pub(crate) const MK_PROCESS_MAIN_APP_ID: MK_Process_ID_u = composite_id!(1,0);
+/// Com Process Mailbox (sender: Main Process)
+pub(crate) const MK_MAILBOX_COM_MAIN_ID: MK_MAILBOX_ID_u = composite_id!(2,0);
+/// MGT Process Mailbox (sender: Main Process)
+pub(crate) const MK_MAILBOX_MGT_MAIN_ID: MK_MAILBOX_ID_u = composite_id!(2,1);
+/// Main Process Mailbox (sender: COM Process)
+pub(crate) const MK_MAILBOX_MAIN_COM_ID: MK_MAILBOX_ID_u = composite_id!(1,0);
+/// Main Process Mailbox (sender: MGT Process)
+pub(crate)  const MK_MAILBOX_MAIN_MGT_ID: MK_MAILBOX_ID_u = composite_id!(1,1);
+/// IPC from the Main Process to the COM Process
+pub(crate) const MK_IPC_MAIN_COM_ID : MK_IPC_ID_u = composite_id!(1,0);
+/// IPC from the COM Process to the Main Process
+pub(crate) const MK_IPC_COM_MAIN_ID : MK_IPC_ID_u = composite_id!(2,0);
+/// IPC from the Main Process to the MGT Process (for SYSTEM VPP APP only)
+pub(crate) const MK_IPC_MAIN_MGT_ID : MK_IPC_ID_u = composite_id!(1,1);
+/// IPC from the MGT Process to the Main Process (for SYSTEM VPP APP only)
+pub(crate) const MK_IPC_MGT_MAIN_ID : MK_IPC_ID_u = composite_id!(2,1);
+
 
 // Cross-Execution-Domain Signals (Table 7-14)
 // As a Mailbox has only a single reader and writer, Cross-Execution-Domain

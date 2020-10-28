@@ -1876,6 +1876,7 @@ impl<C: 'static + Chip> Process<'_, C> {
         let callback_buf =
             slice::from_raw_parts_mut(kernel_memory_break as *mut Task, callback_len);
         let tasks = RingBuffer::new(callback_buf);
+        debug!(" ringbuffer slices {:?} ",tasks.available_len());
 
         // Last thing in the kernel region of process RAM is the process struct.
         kernel_memory_break = kernel_memory_break.offset(-(process_struct_offset as isize));

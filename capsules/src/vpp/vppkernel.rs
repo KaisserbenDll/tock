@@ -35,22 +35,36 @@ use crate::vpp::mloi::VppState::RUNNING;
 use core::convert::TryInto;
 use crate::vpp::mailbox::mbox;
 use crate::vpp::mloi::MK_SIGNAL_e::MK_SIGNAL_ERROR;
+use crate::vpp::ipc::ipc;
+use crate::driver;
+use kernel::common::Queue;
 
-pub const DRIVER_NUM: usize = 0x90015 ;
 pub const NUM_PROCS: usize = 4 ; // Number of allowed vpp processes.
+pub const DRIVER_NUM: usize = driver::NUM::VppDriver as usize;
 
 pub struct VppKernel{
     pub(crate) vpp_processes: &'static [Option<VppProcess>;NUM_PROCS],
     pub(crate) kernel: &'static Kernel,
+    pub(crate) mailboxes: &'static [Option<mbox>;MK_MAILBOX_LIMIT],
+    pub(crate) ipcs: &'static [Option<ipc>; MK_IPC_LIMIT],
     pub(crate) last_error: Cell<MK_ERROR_e>
 }
 
 impl  VppKernel {
     pub fn  new(procs: &'static [Option<VppProcess>;NUM_PROCS],
-        tock_kernel: &'static Kernel) -> VppKernel{
+                mbs: &'static [Option<mbox>;MK_MAILBOX_LIMIT],
+                ipcs: &'static [Option<ipc>; MK_IPC_LIMIT ],
+                tock_kernel: &'static Kernel) -> VppKernel{
+        // Before instantiating the Vpp Kernel with vpp_processes, ipc structs and mailboxes
+        // ,let us make sure that the first Process is the MGT Process, the second Process is
+        // the COM Process and the 3rd Process is the MAIN Process (which is the
+        // actual Userspace App). Also the ipc and mailbox structs of the MGT/COM/MAIN Processes
+        // will be instantiated.
         VppKernel {
             vpp_processes: procs,
             kernel: tock_kernel,
+            mailboxes: mbs,
+            ipcs:ipcs,
             last_error: Cell::new(MK_ERROR_NONE)
         }
     }
@@ -62,8 +76,8 @@ impl  VppKernel {
     /// This function retrieves an error stored by the kernel. The access to the last error
     /// is always possible for a Process and any of its descendants regardless of its state
     /// and is persisten during state transitions.
-    pub (crate) fn _mk_Get_Error(&self) {
-        self.last_error.get();
+    pub (crate) fn _mk_Get_Error(&self) -> MK_ERROR_e{
+        self.last_error.get()
     }
     /// Get the absolute time (in ticks) since the Primary Platfrom start up
     /// The return value is  bits in length.
@@ -220,7 +234,7 @@ impl  VppKernel {
         }
     }
 
-    pub (crate) fn _mk_resume_process(&self, mut _hProcess: MK_HANDLE_t) -> MK_ERROR_e {
+    pub fn _mk_resume_process(&self, mut _hProcess: MK_HANDLE_t) -> MK_ERROR_e {
         let vppprocess = self.get_process_ref_internal(_hProcess);
         if vppprocess.is_some() {
             let process = vppprocess.unwrap();
@@ -256,23 +270,28 @@ impl  VppKernel {
     }
 
     // 3) Mailbox Management
-    ///// Helper function to get a reference to a valid Mailbox  based on a handle. It returns
-    ///// `None` if the handle is not found.
-   /* pub fn Get_Mailbox_ref_internal(&self, handle: MK_HANDLE_t) -> Option<&mbox> {
+
+    /// Helper function to get a reference to a valid Mailbox  based on a handle. It returns
+    /// `None` if the handle is not found.
+    pub fn Get_Mailbox_ref_internal(&self, handle: MK_HANDLE_t) -> Option<&mbox> {
         let MailboxID = convert_handle_to_mbid(handle);
         let mut return_pointer: Option<&mbox> = None ;
-        for process in self.vpp_processes.iter() {
-            for mailbox in process.as_ref().unwrap().m_xKernel_Mailbox.iter() {
-                if mailbox.get_mb_id() == MailboxID {
-                    self.last_error.set(MK_ERROR_NONE);
-                    return_pointer = Some(mailbox);
-                    break;
-                } else {
-                    self.last_error.set(MK_ERROR_UNKNOWN_ID);
-                    return_pointer = None;
+            for mailbox in self.mailboxes.iter(){
+                match mailbox {
+                    Some(mb) => { if mb.get_mb_id() == MailboxID {
+                        self.last_error.set(MK_ERROR_NONE);
+                        return_pointer = Some(mb);
+                        break;
+                    } else {
+                        self.last_error.set(MK_ERROR_UNKNOWN_ID);
+                        return_pointer = None;
+                    }},
+                    None =>  {
+                        self.last_error.set(MK_ERROR_UNKNOWN_ID);
+                        return_pointer = None;
+                    }
                 }
             }
-        }
         return_pointer
     }
     /// Get a Mailbox Handle from a Mailbox identifier
@@ -298,17 +317,19 @@ impl  VppKernel {
     /// This function sends Signals to a Mailbox. The Signals sent are represented as a bitmap
     /// of Signal values and there is no priority among Signals as to the order of their arrival
     /// within the Mailbox.
-    pub fn _mk_Send_Signal(&self,_hMailbox: MK_HANDLE_t,_eSignal: MK_SIGNAL_e) ->  MK_ERROR_e{
-       /* let mailbox = self.Get_Mailbox_ref_internal(_hMailbox);
+    pub fn _mk_Send_Signal(&self,_hMailbox: MK_HANDLE_t,_eSignal: MK_BITMAP_t) ->  MK_ERROR_e{
+        let  mailbox = self.Get_Mailbox_ref_internal(_hMailbox);
 
         if mailbox.is_some() {
-            mailbox.unwrap().add_sig(_eSignal);
-            MK_ERROR_NONE
-        } else
-        {MK_ERROR_UNKNOWN_HANDLE }
-        */
-
-        unimplemented!()
+            let res = mailbox.unwrap().add_sig(_eSignal).unwrap();
+            if res == true {
+                MK_ERROR_NONE
+            } else {
+                MK_ERROR_SEVERE
+            }
+        } else { MK_ERROR_UNKNOWN_HANDLE }
+        // the case of access denied is not yet handled.
+        //IF the caller Process is not defined as the sender Process of the Mailox throw an error
     }
     /// Wait for a Signal on a Mailbox
     /// This function waits for a Signal on one or any Mailboxes of the caller Process,
@@ -331,52 +352,100 @@ impl  VppKernel {
     /// from its own Mailbox. The _mk_Get_Signal should be repeatedly called until 0 is returned.
     /// The pending Signals are cleared once they have been read.
     pub fn _mk_Get_Signal(&self, _hMailbox: MK_HANDLE_t) -> Option<MK_BITMAP_t> {
-        /*let mailbox = self.Get_Mailbox_ref_internal(_hMailbox);
+        let mailbox = self.Get_Mailbox_ref_internal(_hMailbox);
         if mailbox.is_some() {
-            let sig = mailbox.unwrap().retrieve_last_sig();
-            Some(sig)
+            let retrieved_sig = mailbox.unwrap().retrieve_last_sig();
+            retrieved_sig
         } else {
             // This is a problem => self.last_error.set(MK_SIGNAL_ERROR);
             None
-        }*/
-    unimplemented!()
-    }
-    pub (crate) fn handle_signals(&self,_eSignal:MK_BITMAP_t){
-
-    unimplemented!()
-    }
-*/
-    // 4) IPC Management
-    // 5) VRE Management
-    // 6) Firmware Management
-}
-
-// Implementing a Syscall Driver for Vpp Process Manager (VPM)
-/*
-pub struct VPMDriver {
-    vpm: &'static VppKernel<Capability>,
-    // apps: Grant<Option<Callback>>,
-}
-impl VPMDriver{
-    pub fn new( vpm:  &'static VppKernel<Capability>) -> VPMDriver{
-        // grant: Grant<Option<Callback>>,) -> VPMDriver{
-        VPMDriver{
-            vpm,
-            // apps: grant
         }
     }
+
+    pub (crate) fn handle_signals(&self,_eSignal:MK_BITMAP_t){
+        /*match _eSignal{
+
+
+
+        }*/
+        unimplemented!()
+    }
+
+    // 4) IPC Management
+
+    /// Helper function to get a reference to a valid IPC  based on a handle. It returns
+    /// `None` if the handle is not found.
+    pub fn Get_IPC_ref_internal(&self, handle: MK_HANDLE_t) -> Option<&ipc> {
+        let IPC_ID = convert_handle_to_ipcID(handle);
+        let mut return_pointer: Option<&ipc> = None ;
+        for ipc in self.ipcs.iter(){
+            match ipc {
+                Some(ipc_struct) => { if ipc_struct.get_ipc_id() == IPC_ID {
+                    self.last_error.set(MK_ERROR_NONE);
+                    return_pointer = Some(ipc_struct);
+                    break;
+                } else {
+                    self.last_error.set(MK_ERROR_UNKNOWN_ID);
+                    return_pointer = None;
+                }},
+                None =>  {
+                    self.last_error.set(MK_ERROR_UNKNOWN_ID);
+                    return_pointer = None;
+                }
+            }
+        }
+        return_pointer
+    }
+
+    /// Get the Handle of an IPC for communication between two Processes
+    /// The size, ownership and the granted access of the IPC are defined in the IPC
+    /// Descriptor. The owner Process (writer) of the IPC has a read-write access.
+    /// The granted access Process (reader) has read-only access.
+    pub(crate) fn _mk_Get_IPC_Handle(&self, _eIPC_ID: MK_IPC_ID_u) -> Option<MK_HANDLE_t> {
+        // Control Access is still missing
+        let handle = convert_ipcID_to_handle(_eMailboxID);
+        let ipc = self.Get_IPC_ref_internal(handle);
+        if ipc.is_some() {Some(handle)} else {None}
+    }
+
+
+    /// Get access to a shared memory area used by an IPC.
+    /// This function returns the virtual memory address of the IPC. Since no MMU is provided.
+    /// This will returns the physical memory address of the shared memory.
+     pub(crate) fn _mk_Get_Access_IPC(&self, _hIPC: MK_HANDLE_t) -> Option<u8>{
+    unimplemented!()
+
+    }
+    /// Release access to the IPC. This function allows releasing the access to the IPC.
+    /// The Process can no longer access the shared memory. The IPC is a scarce resource,
+    /// thus the number of access of IPC is limited (MK_IPC_LIMIT) at run time.
+    pub (crate) fn _mk_Release_Access_IPC(&self, _hIPC: MK_HANDLE_t) -> MK_ERROR_e {
+        unimplemented!( )
+    }
+
+    // 5) VRE Management
+    // 6) Firmware Management
+
 }
 
+/// Syscall Driver for VPP ABI/API Kernel functions
+pub struct vpp_kernel_driver {
+    vpp_kernel: &'static VppKernel,
+}
 
-impl Driver  for VPMDriver {
+impl vpp_kernel_driver{
+    pub fn new(vpp_kernel:  &'static VppKernel) -> vpp_kernel_driver{vpp_kernel_driver{vpp_kernel}}
+}
+
+impl Driver  for vpp_kernel_driver {
     fn command(&self,
                command_num: usize,
                data: usize,
-               _data2: usize,
-               appid: AppId) -> ReturnCode {
+               data2: usize,
+               _appid: AppId) -> ReturnCode {
         match command_num {
             0 => ReturnCode::SUCCESS,
-            1 =>
+            /*1 =>
                 {
                     debug!("Suspending Process");
                     //debug!("Data is {:?}", data);
@@ -419,7 +488,7 @@ impl Driver  for VPMDriver {
                     let vpp_state = process.unwrap().vppstate.get();
                     debug!("Tock State {:?} , Vpp Process {:?}", tock_state, vpp_state);
                     ReturnCode::SUCCESS
-                },
+                },*/
             // 4 =>
             //     {
             //         debug!("Getting  Process Handle");
@@ -428,10 +497,44 @@ impl Driver  for VPMDriver {
             //         self.vpm._mk_Get_Error();
             //         ReturnCode::SUCCESS
             //     },
+            5 => {
+                let handle =
+                    self
+                        .vpp_kernel
+                        ._mk_Get_Mailbox_Handle(data as MK_MAILBOX_ID_u);
+
+                self.vpp_kernel._mk_Get_Error();
+
+                if handle.is_some() {ReturnCode::SuccessWithValue {value: handle.unwrap() as usize} }
+                else { ReturnCode::FAIL}
+
+            },
+            6 => {
+                // debug!("Sending a Signal");
+                let error = self.vpp_kernel.
+                    _mk_Send_Signal( data as MK_HANDLE_t,
+                                    data2 as MK_BITMAP_t
+
+                ).into();
+
+                ReturnCode::SuccessWithValue {value:error}
+            },
+            7 => {
+                // debug!("Retrieving last  Signal");
+                let bitmap = self.vpp_kernel
+                    ._mk_Get_Signal(data as MK_HANDLE_t);
+                if bitmap.is_some(){
+                    ReturnCode::SuccessWithValue {value: bitmap.unwrap() as usize }
+                }
+                else { ReturnCode::FAIL}
+            }
+            
+            100 => {
+                let error = self.vpp_kernel._mk_Get_Error();
+                debug!("Last Error is {:?}", error);
+                ReturnCode::SUCCESS
+            }
             _ => ReturnCode::ENOSUPPORT,
         }
     }
 }
-
-
-*/

@@ -32,13 +32,17 @@ pub mod io;
 pub mod usb;
 
 use capsules::vpp::vppkernel::NUM_PROCS;
+use capsules::vpp::mloi::{MK_MAILBOX_LIMIT, MK_IPC_LIMIT};
+use capsules::vpp::mailbox::mbox;
+use capsules::vpp::ipc::ipc;
 
 // Actual memory for holding the active process structures. Need an empty list
 // at least.
 static mut PROCESSES: [Option<&'static dyn kernel::procs::ProcessType>; NUM_PROCS] =
     [None;NUM_PROCS];
 static mut VPP_PROCESSES: [Option<VppProcess>;NUM_PROCS] = [None;NUM_PROCS];
-
+static mut MBOX_ARRAY: [Option<mbox>;MK_MAILBOX_LIMIT] = [None;MK_MAILBOX_LIMIT];
+static mut IPC_ARRAY : [Option<ipc>; MK_IPC_LIMIT] = [None;MK_IPC_LIMIT];
 static mut CHIP: Option<
     &'static earlgrey::chip::EarlGrey<VirtualMuxAlarm<'static, earlgrey::timer::RvTimer>>,
 > = None;
@@ -73,6 +77,7 @@ struct OpenTitan {
     >,
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<lowrisc::i2c::I2c<'static>>,
     pm : &'static capsules::vpp::pmsyscall::ProcessManager,
+    vpp_driver: &'static capsules::vpp::vppkernel::vpp_kernel_driver,
      // vpmdriver: &'static capsules::vpp::ProcessManagerConsoleCap::VPMDriver,
     // testdriver: &'static capsules::vpp::SubTest::Test,
 }
@@ -84,6 +89,7 @@ impl Platform for OpenTitan {
         F: FnOnce(Option<&dyn kernel::Driver>) -> R,
     {
         match driver_num {
+            capsules::vpp::vppkernel::DRIVER_NUM => f(Some(self.vpp_driver)),
             // 0x9000A => f(Some(self.testdriver)),
             0x90003 => f(Some(self.pm)),
             // 0x90004 => f(Some(self.vpmdriver)),
@@ -118,7 +124,7 @@ pub unsafe fn reset_handler() {
     let main_loop_cap = create_capability!(capabilities::MainLoopCapability);
 
     let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
-    let _vpp_kernel = static_init!(VppKernel,VppKernel::new(&VPP_PROCESSES,board_kernel));
+     let vpp_kernel = static_init!(VppKernel,VppKernel::new(&VPP_PROCESSES,&MBOX_ARRAY,&IPC_ARRAY,board_kernel));
 
 
     let dynamic_deferred_call_clients =
@@ -283,6 +289,9 @@ pub unsafe fn reset_handler() {
     );
 
     earlgrey::i2c::I2C.set_master_client(i2c_master);
+    // Syscall driver to vpp kernel
+    let vpp_driver = static_init!(capsules::vpp::vppkernel::vpp_kernel_driver,
+    capsules::vpp::vppkernel::vpp_kernel_driver::new(vpp_kernel));
     // useless Syscall Driver
     let pm = static_init!(capsules::vpp::pmsyscall::ProcessManager,
     capsules::vpp::pmsyscall::ProcessManager::new());
@@ -293,10 +302,10 @@ pub unsafe fn reset_handler() {
     // testdriver.trigger_callback();
 
 
-    // let vpp_process_console = capsules::vpp::ProcessManagerConsoleCap
-    // ::ProcessConsoleComponent::new(vpp_kernel,uart_mux)
-    //     .finalize(());
-
+    let vpp_process_console = capsules::vpp::ProcessManagerConsoleCap
+    ::ProcessConsoleComponent::new(vpp_kernel,uart_mux)
+        .finalize(());
+    vpp_process_console.start();
     debug!("OpenTitan initialisation complete. Entering main loop");
 
     let opentitan = OpenTitan {
@@ -310,6 +319,7 @@ pub unsafe fn reset_handler() {
         //usb,
         i2c_master,
         pm,
+        vpp_driver
     };
     // USB support is currently broken in the OpenTitan hardware
     // See https://github.com/lowRISC/opentitan/issues/2598 for more details
@@ -322,14 +332,16 @@ pub unsafe fn reset_handler() {
         // app_memory,
         &mut PROCESSES,
         &mut VPP_PROCESSES,
+        &mut MBOX_ARRAY,
+        &mut IPC_ARRAY,
         FAULT_RESPONSE,
         &process_mgmt_cap)
          .unwrap_or_else(|err| {
              debug!("Error loading processes!");
              debug!("{:?}", err);
          });
-    debug!("Process state {:?}", PROCESSES[0].unwrap().get_state());
-
+        //_vpp_kernel._mk_resume_process(0);
+        //_vpp_kernel._mk_resume_process(1);
     // let vpp_process_console= components::vpm_no_cap::ProcessConsoleComponent::new(board_kernel,uart_mux)
     //     .finalize(());
     // vpp_process_console.start();

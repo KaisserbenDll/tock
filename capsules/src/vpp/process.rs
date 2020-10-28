@@ -16,6 +16,7 @@ use kernel::tbfheader;
 use crate::vpp;
 use kernel::{debug, static_init};
 use crate::vpp::vppkernel::NUM_PROCS;
+use crate::net::thread::tlv::BorderRouterTlvValueBit::S;
 
 #[derive(Clone)]
 pub struct VppProcess {
@@ -23,18 +24,16 @@ pub struct VppProcess {
     pub(crate) vppstate: Cell<VppState>,
     pub(crate) vpppriority: Cell<MK_PROCESS_PRIORITY_e>,
     pub(crate) vppid: Cell<MK_Process_ID_u>,
-    pub(crate) m_xKernel_Mailbox: Option<&'static mbox>,
-    pub(crate) ipc: Option<&'static ipc>
 }
 /// This is a replication of `load_processes` function by tock with the addition of VPP
 /// Process specification. It returns an array `procs` of VPP Processes.
 pub unsafe fn  load_vpp_processes<C: Chip>(
     kernel: &'static Kernel,
     chip: &'static C,
-    // app_flash: &'static [u8],
-    // app_memory: &'static mut [u8],
     tock_procs: &'static mut [Option<&'static dyn ProcessType>],
-    vpp_procs : &'static mut [Option<VppProcess>;NUM_PROCS],
+    vpp_procs : &'static mut [Option<VppProcess>],
+    mbs: &'static mut [Option<mbox>],
+    ipcs: &'static mut [Option<ipc>],
     fault_response: FaultResponse,
     _capability: &dyn ProcessManagementCapability)
     -> Result<(), ProcessLoadError> {
@@ -75,6 +74,20 @@ pub unsafe fn  load_vpp_processes<C: Chip>(
             app_memory.as_ptr() as usize + app_memory.len() - 1
         );
     }
+    debug!("COM_VPP_ID is          {:#06X}",    MK_PROCESS_COM_VPP_ID);
+    debug!("MGT_VPP_ID is          {:#06X}",    MK_PROCESS_MGT_VPP_ID);
+    debug!("MAIN_APP_ID is         {:#06X}",    MK_PROCESS_MAIN_APP_ID);
+
+    debug!("Mailbox COM_MAIN_ID is {:#06X}",    MK_MAILBOX_COM_MAIN_ID);
+    debug!("Mailbox MGT_MAIN_ID is {:#06X}",    MK_MAILBOX_MGT_MAIN_ID);
+    debug!("Mailbox MAIN_COM_ID is {:#06X}",    MK_MAILBOX_MAIN_COM_ID);
+    debug!("Mailbox MAIN_MGT_ID is {:#06X}",    MK_MAILBOX_MAIN_MGT_ID);
+
+    debug!("IPC MGT_MAIN_ID is     {:#06X}",    MK_IPC_MGT_MAIN_ID);
+    debug!("IPC COM_MAIN_ID is     {:#06X}",    MK_IPC_COM_MAIN_ID);
+    debug!("IPC MAIN_COM_ID is     {:#06X}",    MK_IPC_MAIN_COM_ID);
+    debug!("IPC MAIN_MGT_ID is     {:#06X}",    MK_IPC_MAIN_MGT_ID);
+
 
     let mut remaining_flash = app_flash;
     let mut remaining_memory = app_memory;
@@ -164,36 +177,37 @@ pub unsafe fn  load_vpp_processes<C: Chip>(
                     );
                 }
                 tock_procs[i] = Some(process);
-                let mailbox= static_init!(vpp::mailbox::mbox,
-                vpp::mailbox::mbox::new(0,i,i+1));
-                let ipc = static_init!(vpp::ipc::ipc,
-                vpp::ipc::ipc::new(0,64,0,1));
 
-                let vpp_process = VppProcess::create_vpp_process(
+
+                // let mailbox= static_init!(vpp::mailbox::mbox,
+                // vpp::mailbox::mbox::new(0,i,i+1));
+                // let ipc = static_init!(vpp::ipc::ipc,
+                // vpp::ipc::ipc::new(0,64,0,1));
+
+              /*  let vpp_process = VppProcess::create_vpp_process(
                     tock_procs[i],
-                    i as MK_Process_ID_u,
-                    Some(mailbox),
-                    Some(ipc));
-                    //mailbox,
-                    //ipc);
+                    i as MK_Process_ID_u);
+                    // Some(mailbox),
+                    // Some(ipc));
 
                 // starting any process with the StoppedYielded State
-                /*vpp_process.tockprocess.map(|proc| {
+               vpp_process.tockprocess.map(|proc| {
                     let ccb = FunctionCall {
                         source: FunctionCallSource::Kernel,
-                        pc: 0x2003005c,
-                        argument0: 0x20030034,
-                        argument1: 0x10003c00,
-                        argument2: 0x1fb0,
-                        argument3: 0x10004800,
+                        pc: proc.flash_non_protected_start() as usize,
+                        argument0: proc.flash_start() as usize,
+                        argument1: proc.mem_start() as usize,
+                        argument2: proc.mem_end() as usize - proc.mem_start() as usize,
+                        argument3: proc.kernel_memory_break() as usize,
                     };
                     proc.set_process_function(ccb);
                     proc.set_yielded_state();
                     proc.stop();
-                });*/
+                    // let _ccb = proc.dequeue_task();
+                });
 
                 // Save the reference to this process in the processes array.
-                vpp_procs[i] = Some(vpp_process);
+                //vpp_procs[i] = Some(vpp_process);*/
             });
             unused_memory
         } else {
@@ -201,6 +215,48 @@ pub unsafe fn  load_vpp_processes<C: Chip>(
             // same amount of process memory to allocate from.
             remaining_memory
         };
+        // Before instantiating the Vpp Kernel with vpp_processes, ipc structs and mailboxes
+        // ,let us make sure that the first Process is the MGT Process, the second Process is
+        // the COM Process and the 3rd Process is the MAIN Process (which is the
+        // actual Userspace App). Also the ipc and mailbox structs of the MGT/COM/MAIN Processes
+        // will be instantiated.
+        let mgt_process = VppProcess::create_mgt_process(tock_procs[0]);
+        let com_process = VppProcess::create_com_process(tock_procs[1]);
+        let main_process = VppProcess::create_main_process(tock_procs[2]);
+        main_process.tockprocess.map(|proc| {
+            let ccb = FunctionCall {
+                source: FunctionCallSource::Kernel,
+                pc: proc.flash_non_protected_start() as usize,
+                argument0: proc.flash_start() as usize,
+                argument1: proc.mem_start() as usize,
+                argument2: proc.mem_end() as usize - proc.mem_start() as usize,
+                argument3: proc.kernel_memory_break() as usize,
+            };
+            proc.set_process_function(ccb);
+            proc.set_yielded_state();
+            proc.stop();});
+        vpp_procs[0] = Some(mgt_process);
+        vpp_procs[1] = Some(com_process);
+        vpp_procs[2] = Some(main_process);
+        //There are 4 Mailboxes.
+        let mgt_main_mb = mbox::create_mgt_mb();
+        let com_main_mb = mbox::create_com_mb();
+        let main_mgt_mb = mbox::create_main_mgt_mb();
+        let main_com_mb = mbox::create_main_com_mb();
+        mbs[0] = Some(mgt_main_mb);
+        mbs[1] = Some(com_main_mb);
+        mbs[2] = Some(main_mgt_mb);
+        mbs[3] = Some(main_com_mb);
+        // There are 4 ipc structs
+        let main_com_ipc = ipc::create_main_com_ipc();
+        let com_main_ipc = ipc::create_com_main_ipc();
+        let main_mgt_ipc = ipc::create_main_mgt_ipc();
+        let mgt_main_ipc = ipc::create_mgt_main_ipc() ;
+        ipcs[0] = Some(main_com_ipc);
+        ipcs[1] = Some(com_main_ipc);
+        ipcs[2] = Some(main_mgt_ipc);
+        ipcs[3] = Some(mgt_main_ipc);
+
     }
     Ok(())
 }
@@ -208,17 +264,37 @@ pub unsafe fn  load_vpp_processes<C: Chip>(
 impl  VppProcess{
     pub fn create_vpp_process(
         tockprocess: Option<&'static dyn ProcessType>,
-        pid : MK_Process_ID_u,
-        mailbox  : Option<&'static mbox>,
-        ipc : Option<&'static ipc>
+        pid : MK_Process_ID_u
         )-> VppProcess{
         VppProcess {
             tockprocess: tockprocess,
             vppstate: Cell::new(VppState::SUSPENDED_R),
             vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_NORMAL),
             vppid: Cell::new(pid),
-            m_xKernel_Mailbox: mailbox,
-            ipc: ipc
+        }
+    }
+    pub fn create_mgt_process(tockprocess: Option<&'static dyn ProcessType> ) -> VppProcess{
+        VppProcess{
+            tockprocess: tockprocess,
+            vppstate: Cell::new(VppState::READY),
+            vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_NORMAL),
+            vppid: Cell::new(MK_PROCESS_MGT_VPP_ID)
+        }
+    }
+    pub fn create_com_process(tockprocess: Option<&'static dyn ProcessType>) -> VppProcess{
+        VppProcess{
+            tockprocess,
+            vppstate: Cell::new(VppState::READY),
+            vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_NORMAL),
+            vppid: Cell::new(MK_PROCESS_COM_VPP_ID)
+        }
+    }
+    pub fn create_main_process(tockprocess: Option<&'static dyn ProcessType>) -> VppProcess{
+        VppProcess{
+            tockprocess,
+            vppstate: Cell::new(VppState::READY),
+            vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_NORMAL),
+            vppid: Cell::new(MK_PROCESS_MAIN_APP_ID)
         }
     }
 
