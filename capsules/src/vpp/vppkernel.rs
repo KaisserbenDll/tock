@@ -6,7 +6,7 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 #![allow(dead_code)]
-
+#![allow(unused_assignments)]
 use core::cell::Cell;
 use core::cmp;
 use core::str;
@@ -16,7 +16,7 @@ use crate::vpp::mloi::*;
 use crate::vpp::process::*;
 use crate::vpp::mloi::VppState::*;
 use crate::vpp::process;
-use kernel::{Kernel, capabilities, Chip};
+use kernel::{Kernel, capabilities, Chip, AppSlice, Shared};
 use kernel::introspection::KernelInfo;
 use kernel::common::cells::TakeCell;
 use kernel::procs::{ProcessType, Process, FaultResponse, ProcessLoadError};
@@ -47,7 +47,6 @@ pub struct VppKernel{
     pub(crate) kernel: &'static Kernel,
     pub(crate) mailboxes: &'static [Option<mbox>;MK_MAILBOX_LIMIT],
     pub(crate) ipcs: &'static [Option<ipc>; MK_IPC_LIMIT],
-    pub(crate) last_error: Cell<MK_ERROR_e>
 }
 
 impl  VppKernel {
@@ -65,19 +64,28 @@ impl  VppKernel {
             kernel: tock_kernel,
             mailboxes: mbs,
             ipcs:ipcs,
-            last_error: Cell::new(MK_ERROR_NONE)
         }
     }
     // 1) Generic Functions
     pub (crate) fn _mk_Get_Exception(&self){
         unimplemented!()
     }
-    /// Get the last error generated through the execution of any function within a the Kernel
-    /// This function retrieves an error stored by the kernel. The access to the last error
-    /// is always possible for a Process and any of its descendants regardless of its state
-    /// and is persisten during state transitions.
-    pub (crate) fn _mk_Get_Error(&self) -> MK_ERROR_e{
-        self.last_error.get()
+
+    /// Get the most recent error generated through the execution of a function within a given Process
+    /// The function retrieves an error stored by the kernel. The caller of this function can access
+    /// the last error which occured in itself or in any of the processes it own. This error can be
+    /// retrieved regardless of the state of the process referenced by the _hProcess Handle and is not
+    /// modified by a state transition. Power off cycle and other reset will clear the stored error.
+    /// mk_Get_Error function does not modify the last error stored for this process during its invocation.
+    pub (crate) fn _mk_Get_Error(&self,_hProcess: MK_HANDLE_t) -> MK_ERROR_e{
+        let process_ref = self.get_process_ref_handle(_hProcess);
+        let mut error_retrieved: MK_ERROR_e = MK_ERROR_NONE;
+        if process_ref.is_some(){
+             error_retrieved = process_ref.unwrap().get_last_generated_error();
+        } else {
+            error_retrieved = MK_ERROR_HANDLE_NOT_ACCESSED;
+        }
+        error_retrieved
     }
     /// Get the absolute time (in ticks) since the Primary Platfrom start up
     /// The return value is  bits in length.
@@ -86,10 +94,23 @@ impl  VppKernel {
     }
 
     // 2) Process Management
-
+    /// Helper function to get a reference to a valid process based on the index of the process
+    /// in the group (array) of Processes. The function return `None` if there is no Process with
+    /// such index--.
+    pub (crate) fn get_process_ref_index(&self, index: MK_Index_t) -> Option<&VppProcess> {
+        let mut return_pointer: Option<&VppProcess> = None;
+        for (i, process ) in self.vpp_processes.iter().enumerate(){
+            if i == index as usize {
+                return_pointer = Option::from(process);
+            } else {
+                return_pointer = None;
+            }
+        }
+        return_pointer
+    }
     /// Helper function to get a reference to a valid process based on a handle. It returns
     /// `None` if the process is in dead state or if the handle is not found.
-    pub (crate) fn get_process_ref_internal(&self, handle: MK_HANDLE_t) -> Option<&VppProcess> {
+    pub (crate) fn get_process_ref_handle(&self, handle: MK_HANDLE_t) -> Option<&VppProcess> {
         // Mapping id to handle. For the time being,
         // we consider the handle as the id but in 32 bits. This will probably be changed later.
         let id = convert_to_id(handle);
@@ -100,76 +121,45 @@ impl  VppKernel {
                     if proc.get_vpp_id() == id {
                         // even if id found, the Process must not be in "DEAD" state
                         if proc.get_vpp_state() == VppState::DEAD {
-                            self.last_error.set(MK_ERROR_e::MK_ERROR_UNKNOWN_ID);
+                            proc.error.set(MK_ERROR_e::MK_ERROR_UNKNOWN_ID);
                             return_pointer =  None;
                         }
                         // if the Process in any other state, a pointer to
                         // that process is delivered with a success flag and
                         // break of the loop
                         else {
-                            self.last_error.set(MK_ERROR_e::MK_ERROR_NONE);
+                            proc.error.set(MK_ERROR_e::MK_ERROR_NONE);
                             return_pointer = Some(proc);
                             break;
                         }
                     }
                     else {
-                        self.last_error.set(MK_ERROR_UNKNOWN_ID);
+                        proc.error.set(MK_ERROR_UNKNOWN_ID);
                         return_pointer = None;
                     }
                 }
 
                 None => {
-                    self.last_error.set(MK_ERROR_UNKNOWN_ID);
                     return_pointer = None;
                 }
             }
         }
         return_pointer
-        /* Leaving this buggy implementation here. It might be helpful.
-
-        // // Mapping id to handle. For the time being,
-        // // we consider the handle as the id but in 32 bits. This will probably be changed later.
-        // let id = convert_to_id(handle);
-        //
-        // self.vpp_processes.iter().find_map(|proc| {
-        //     if proc.get_vpp_id() == id {
-        //         // even if id found, the Process must not be in "DEAD" state
-        //         if proc.get_vpp_state() == VppState::DEAD {
-        //             self.last_error.set(MK_ERROR_UNKNOWN_ID);
-        //             debug!("VPP Process is in DEAD state");
-        //             None
-        //         }
-        //         // if the Process in any other state, a pointer to
-        //         // that process is delivered with a success flag
-        //         else {
-        //             self.last_error.set(MK_ERROR_NONE) ;
-        //             debug!("VPP Process is found");
-        //             proc.as_ref()
-        //         }
-        //     // if the id was not found, Unknown ID error is raised.
-        //     } else {
-        //         self.last_error.set(MK_ERROR_UNKNOWN_ID) ;
-        //         debug!("VPP Process ID is not  found");
-        //         None
-        //     }
-        // })
-
-         */
+        //Missing ACCESS DENIED!!!!!!!!!!!!!!!!!!!!!!!!!
     }
-
-    pub (crate)  fn _mk_get_process_handle(& self, _eProcess_ID: MK_Process_ID_u)
-                                           -> MK_HANDLE_t {
+    /// Get the process kernel Handle for itself or for one of its descendants through its
+    /// Process Identifier. The Proces retrieving the Process Handle does not inherit the rights
+    /// of its owner. I
+    pub (crate)  fn _mk_Get_Process_Handle(& self, _eProcess_ID: MK_Process_ID_u)
+                                           -> Option<MK_HANDLE_t> {
         let handle = convert_to_handle(_eProcess_ID);
-        let process =self.get_process_ref_internal(handle);
-        if process.is_some() {handle}  else { 0 }
-        // there is a problem when returning 0 as a handle. This might be in fact
-        // the id of another handle. Whether, a Process ID as 0 is not allowed
-        // or wrap this with an Option.
+        let process =self.get_process_ref_handle(handle);
+        if process.is_some() {Some(handle)}  else { None }
     }
 
 
     pub (crate) fn _mk_get_process_priority(& self, _hProcess: MK_HANDLE_t) -> MK_PROCESS_PRIORITY_e {
-        let process = self.get_process_ref_internal(_hProcess);
+        let process = self.get_process_ref_handle(_hProcess);
         if process.is_some(){
             let prio = process.unwrap().get_vpp_priority();
             debug!("Process Priority is {:?}", prio );
@@ -190,7 +180,7 @@ impl  VppKernel {
         // Check for the value _xPriority if different from those 4 values
         // TO-DO
 
-        let process =self.get_process_ref_internal(_hProcess);
+        let process =self.get_process_ref_handle(_hProcess);
         if process.is_some() {
             process.unwrap().set_vpp_priority(_xPriority);
             debug!("Process Priority set to {:?}",_xPriority );
@@ -223,7 +213,7 @@ impl  VppKernel {
     }
 
     pub (crate) fn _mk_suspend_process(&self, mut _hProcess: MK_HANDLE_t) -> MK_ERROR_e {
-        let vppprocess = self.get_process_ref_internal(_hProcess);
+        let vppprocess = self.get_process_ref_handle(_hProcess);
         if vppprocess.is_some() {
             let process = vppprocess.unwrap();
             process.suspend_vpp_process();
@@ -235,7 +225,7 @@ impl  VppKernel {
     }
 
     pub fn _mk_resume_process(&self, mut _hProcess: MK_HANDLE_t) -> MK_ERROR_e {
-        let vppprocess = self.get_process_ref_internal(_hProcess);
+        let vppprocess = self.get_process_ref_handle(_hProcess);
         if vppprocess.is_some() {
             let process = vppprocess.unwrap();
             process.resume_vpp_process();
@@ -258,12 +248,12 @@ impl  VppKernel {
 
     pub (crate) fn  _mk_yield (&self,_hProcess: MK_HANDLE_t) {
         // Change state of VppState
-        let vpp_process = self.get_process_ref_internal(_hProcess);
+        let vpp_process = self.get_process_ref_handle(_hProcess);
         if vpp_process.is_some(){
             vpp_process.unwrap().yield_vpp_process();
             // Change Tock State
             vpp_process.unwrap().tockprocess.unwrap().set_yielded_state();
-            vpp_process.unwrap().snyc_tock_vpp_states();
+            //vpp_process.unwrap().snyc_tock_vpp_states();
             debug!("VPP Process state {:?}", vpp_process.unwrap().get_vpp_state());
 
         }
@@ -279,15 +269,14 @@ impl  VppKernel {
             for mailbox in self.mailboxes.iter(){
                 match mailbox {
                     Some(mb) => { if mb.get_mb_id() == MailboxID {
-                        self.last_error.set(MK_ERROR_NONE);
+                        // self.last_error.set(MK_ERROR_NONE);
                         return_pointer = Some(mb);
                         break;
                     } else {
-                        self.last_error.set(MK_ERROR_UNKNOWN_ID);
+                        // self.last_error.set(MK_ERROR_UNKNOWN_ID);
                         return_pointer = None;
                     }},
                     None =>  {
-                        self.last_error.set(MK_ERROR_UNKNOWN_ID);
                         return_pointer = None;
                     }
                 }
@@ -321,12 +310,9 @@ impl  VppKernel {
         let  mailbox = self.Get_Mailbox_ref_internal(_hMailbox);
 
         if mailbox.is_some() {
-            let res = mailbox.unwrap().add_sig(_eSignal).unwrap();
-            if res == true {
-                MK_ERROR_NONE
-            } else {
-                MK_ERROR_SEVERE
-            }
+            mailbox.unwrap().add_sig(_eSignal);
+            MK_ERROR_NONE
+
         } else { MK_ERROR_UNKNOWN_HANDLE }
         // the case of access denied is not yet handled.
         //IF the caller Process is not defined as the sender Process of the Mailox throw an error
@@ -343,7 +329,24 @@ impl  VppKernel {
     /// MK_SIGNAL_ERROR, and MK_SIGNAL_EXCEPTION are sent to that Mailbox.
     ///
     /// * Only the owner of the Mailbox can wait on it.
-    pub fn _mk_Wait_Signal(&self, _hMailbox: MK_HANDLE_t, _uTime: u32) {
+    pub fn _mk_Wait_Signal(&self, _hMailbox: MK_HANDLE_t, _uTime: u32) -> MK_ERROR_e {
+    //How to change the state of the Process ?!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      /*  let mbox = self.Get_Mailbox_ref_internal(hMailbox);
+        if mbox.is_some(){
+
+            if _uTime == 0 {
+             // If the value is 0, the function will not wait for a Signal
+             // amd will return control to the called Process immediately
+                return MK_ERROR_NONE;
+            }
+            let proc_owner_index = mbox.unwrap().get_owner_proc_i();
+            let process = self.get_process_ref_index(proc_owner_index as usize)?;
+            // put the process that owns the mailbox in a Waiting State (TBD how can this be achieved in Tock)
+            process.waiting_vpp_process();
+            MK_ERROR_NONE
+        } else {
+            MK_ERROR_UNKNOWN_HANDLE
+        }*/
         unimplemented!()
     }
 
@@ -354,21 +357,12 @@ impl  VppKernel {
     pub fn _mk_Get_Signal(&self, _hMailbox: MK_HANDLE_t) -> Option<MK_BITMAP_t> {
         let mailbox = self.Get_Mailbox_ref_internal(_hMailbox);
         if mailbox.is_some() {
-            let retrieved_sig = mailbox.unwrap().retrieve_last_sig();
-            retrieved_sig
+            let retrieved_sig = mailbox.unwrap().get_sig();
+            Some(retrieved_sig)
         } else {
             // This is a problem => self.last_error.set(MK_SIGNAL_ERROR);
             None
         }
-    }
-
-    pub (crate) fn handle_signals(&self,_eSignal:MK_BITMAP_t){
-        /*match _eSignal{
-
-
-
-        }*/
-        unimplemented!()
     }
 
     // 4) IPC Management
@@ -381,15 +375,15 @@ impl  VppKernel {
         for ipc in self.ipcs.iter(){
             match ipc {
                 Some(ipc_struct) => { if ipc_struct.get_ipc_id() == IPC_ID {
-                    self.last_error.set(MK_ERROR_NONE);
+                    // self.last_error.set(MK_ERROR_NONE);
                     return_pointer = Some(ipc_struct);
                     break;
                 } else {
-                    self.last_error.set(MK_ERROR_UNKNOWN_ID);
+                    // self.last_error.set(MK_ERROR_UNKNOWN_ID);
                     return_pointer = None;
                 }},
                 None =>  {
-                    self.last_error.set(MK_ERROR_UNKNOWN_ID);
+                    // self.last_error.set(MK_ERROR_UNKNOWN_ID);
                     return_pointer = None;
                 }
             }
@@ -403,7 +397,7 @@ impl  VppKernel {
     /// The granted access Process (reader) has read-only access.
     pub(crate) fn _mk_Get_IPC_Handle(&self, _eIPC_ID: MK_IPC_ID_u) -> Option<MK_HANDLE_t> {
         // Control Access is still missing
-        let handle = convert_ipcID_to_handle(_eMailboxID);
+        let handle = convert_ipcID_to_handle(_eIPC_ID);
         let ipc = self.Get_IPC_ref_internal(handle);
         if ipc.is_some() {Some(handle)} else {None}
     }
@@ -412,8 +406,19 @@ impl  VppKernel {
     /// Get access to a shared memory area used by an IPC.
     /// This function returns the virtual memory address of the IPC. Since no MMU is provided.
     /// This will returns the physical memory address of the shared memory.
-     pub(crate) fn _mk_Get_Access_IPC(&self, _hIPC: MK_HANDLE_t) -> Option<u8>{
-    unimplemented!()
+     pub(crate) fn _mk_Get_Access_IPC(&self, _hIPC: MK_HANDLE_t, _appid_caller: AppId) -> Option<u8>{
+        // let _ipc = self.Get_IPC_ref_internal(handle)?;
+        // let _reader_index = _ipc.get_reader_proc_i();
+        // let _writer_index = _ipc.get_writer_proc_i();
+        // let process_reader_id = self.get_process_ref_index(_reader_index)?;
+        // let slice = process_reader_id.tockprocess.unwrap().
+        //     allow(base_address, _ipc.get_ipc_len() as usize);
+        // let process_writer_id = self.get_process_ref_index(_writer_index)?;
+        // let process_reader_appid= process_reader_id.tockprocess.unwrap().appid();
+        // let process_writer_appid = process_writer_id.tockprocess.unwrap().appid();
+        // _ipc.share_slice(process_reader_appid,process_writer_appid);
+
+        unimplemented!()
 
     }
     /// Release access to the IPC. This function allows releasing the access to the IPC.
@@ -478,32 +483,21 @@ impl Driver  for vpp_kernel_driver {
                     self.vpm._mk_yield(handle);
                     self.vpm._mk_Get_Error();
                     ReturnCode::SUCCESS
-                },
-            4 =>
-                {
-                    debug!("Testing States");
-                    let process = self.vpm.get_process_ref_internal(data as u32);
-                    //process.unwrap().sync_vpp_tock_states();
-                    let tock_state = process.unwrap().tockprocess.unwrap().get_state();
-                    let vpp_state = process.unwrap().vppstate.get();
-                    debug!("Tock State {:?} , Vpp Process {:?}", tock_state, vpp_state);
-                    ReturnCode::SUCCESS
                 },*/
-            // 4 =>
-            //     {
-            //         debug!("Getting  Process Handle");
-            //         let handle = self.vpm._mk_get_process_handle(data as u16);
-            //         let data = handle ;
-            //         self.vpm._mk_Get_Error();
-            //         ReturnCode::SUCCESS
-            //     },
+            1 =>
+                {
+                    let handle =
+                        self
+                            .vpp_kernel
+                            ._mk_Get_Process_Handle(data as MK_Process_ID_u);
+                    if handle.is_some() {ReturnCode::SuccessWithValue {value: handle.unwrap() as usize} }
+                    else { ReturnCode::SuccessWithValue {value: 0}}
+                },
             5 => {
                 let handle =
                     self
                         .vpp_kernel
                         ._mk_Get_Mailbox_Handle(data as MK_MAILBOX_ID_u);
-
-                self.vpp_kernel._mk_Get_Error();
 
                 if handle.is_some() {ReturnCode::SuccessWithValue {value: handle.unwrap() as usize} }
                 else { ReturnCode::FAIL}
@@ -527,14 +521,39 @@ impl Driver  for vpp_kernel_driver {
                     ReturnCode::SuccessWithValue {value: bitmap.unwrap() as usize }
                 }
                 else { ReturnCode::FAIL}
-            }
-            
+            },
+            /*10 => {
+                let shared_address = self.vpp_kernel._mk_Get_Access_IPC(data as u32,appid)?;
+                ReturnCode::SuccessWithValue {value: shared_address as usize }
+            },*/
             100 => {
-                let error = self.vpp_kernel._mk_Get_Error();
-                debug!("Last Error is {:?}", error);
-                ReturnCode::SUCCESS
+                let error = self.vpp_kernel._mk_Get_Error(data as u32);
+                ReturnCode::SuccessWithValue {value: error.into() }
+
             }
             _ => ReturnCode::ENOSUPPORT,
         }
+    }
+
+    fn allow(
+        &self,
+        appid: AppId,
+        ipc_handle: usize,
+        shared_mem: Option<AppSlice<Shared, u8>>,
+    ) -> ReturnCode {
+        let ipc_wrapped = self.vpp_kernel.Get_IPC_ref_internal(ipc_handle as u32);
+        let ipc = ipc_wrapped.unwrap();
+        let ret = ipc.data.enter(appid, |data,_| {
+            let tmp = shared_mem.as_ref().unwrap().ptr();
+            debug!("Address shared buff {:?}",tmp);
+            data.shared_memory= shared_mem;
+            ReturnCode::SuccessWithValue {value: tmp as usize}
+        }).unwrap_or(ReturnCode::EBUSY);
+        let index = ipc.get_writer_proc_i();
+        let caller_id = self.vpp_kernel.kernel.lookup_app_by_identifier(index as usize);
+        if Some(appid) == caller_id {
+            ipc.expose_slice_to_app(caller_id.unwrap(), appid);
+        }
+        ret
     }
 }

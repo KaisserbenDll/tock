@@ -222,6 +222,10 @@ pub enum MK_ERROR_e {
     MK_ERROR_ACCESS_DENIED,
     /// Internal Error
     MK_ERROR_INTERNAL,
+    ///Handle not accessed
+    MK_ERROR_HANDLE_NOT_ACCESSED,
+    /// Error specific for function mk_Get_Error
+    MK_ERROR_GET_ERROR_HANDLE_NOT_A_PROCESS,
     /// Reserved for VPP imlementation-specific
     MK_ERROR_VENDOR_BASE,
     /// Maximal error value
@@ -239,6 +243,8 @@ impl From<MK_ERROR_e> for usize {
             MK_ERROR_e::MK_ERROR_UNKNOWN_PRIORITY => 6 ,
             MK_ERROR_e::MK_ERROR_ACCESS_DENIED => 7,
             MK_ERROR_e::MK_ERROR_INTERNAL => 8,
+            MK_ERROR_e::MK_ERROR_HANDLE_NOT_ACCESSED =>9,
+            MK_ERROR_e::MK_ERROR_GET_ERROR_HANDLE_NOT_A_PROCESS => 10,
             MK_ERROR_e::MK_ERROR_VENDOR_BASE => 32,
             MK_ERROR_e::MK_ERROR_MAX => 255
         }
@@ -273,6 +279,12 @@ impl fmt::Debug for MK_ERROR_e {
             }
             MK_ERROR_e::MK_ERROR_INTERNAL => {
                 write!(f, "Internal Error\n")
+            }
+            MK_ERROR_e::MK_ERROR_HANDLE_NOT_ACCESSED => {
+                write!(f, "Handle is not accessed\n")
+            }
+            MK_ERROR_e::MK_ERROR_GET_ERROR_HANDLE_NOT_A_PROCESS => {
+                write!(f, "Not a valid Handle\n")
             }
             MK_ERROR_e::MK_ERROR_VENDOR_BASE=> {
                 write!(f, "Reserved for VPP implementation specific\n")
@@ -478,8 +490,8 @@ pub (crate) const MK_APP_STOP_GRACEFUL_TICKS : u8 = 10;
 pub (crate) const MK_IPC_DOMAIN_BASE_ID : u8 = 100;
 
 /// Length of the IPC identified by MK_IPC_MAIN_COM_ID
-/// and MK_IPC_COM_MAIN_ID
-// const MK_IPC_COM_LENGTH: u8 =
+/// and MK_IPC_COM_MAIN_ID ( 4KiB converted is 4096 in dec and 1000 in hex)
+pub  const MK_IPC_COM_LENGTH: u16 = 4096;
 
 /// Maximal number of IPC descriptors per Firmware
 pub  const MK_IPC_LIMIT : usize = 64 ;
@@ -489,11 +501,11 @@ pub  const MK_IPC_LIMIT : usize = 64 ;
 pub (crate) const MK_IPC_MAX_ID : u16 = 0x3FFF;
 
 ///Length of the IPC identified by MK_IPC_MAIN_MGT_ID and
-/// MK_IPC_MGT_MAIN_ID
-// const  MK_IPC_MGT_LENGTH : =6KB;
+/// MK_IPC_MGT_MAIN_ID (6KiB converted is 6144 in dec and 1800 in hex)
+pub const  MK_IPC_MGT_LENGTH : u16 = 6144;
 
-///Maximal IPC length
-// const MK_IPC_SIZE_LIMIT :  =32Kb ;
+///Maximal IPC length (32KiB converted is 32768 in dec and 8000 in hex)
+pub const MK_IPC_SIZE_LIMIT : u16  = 32768 ;
 
 ///Minimal enumerated library identifier within the scope
 /// of an Execution Domain (including BASE_ID)

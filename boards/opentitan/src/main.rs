@@ -342,26 +342,6 @@ pub unsafe fn reset_handler() {
          });
         //_vpp_kernel._mk_resume_process(0);
         //_vpp_kernel._mk_resume_process(1);
-    // let vpp_process_console= components::vpm_no_cap::ProcessConsoleComponent::new(board_kernel,uart_mux)
-    //     .finalize(());
-    // vpp_process_console.start();
-    // let vpmdriver = static_init!(
-    // capsules::vpp::ProcessManagerConsole::VPMDriver,
-    // capsules::vpp::ProcessManagerConsole::VPMDriver::new(vpp_process_console));
-
-
-    // let vpp_process_con = capsules::vpp::ProcessManagerConsoleCap::ProcessConsoleComponent::new(board_kernel,uart_mux);
-    // let vpp_process_component = vpp_process_con.finalize(());
-    // // vpp_process_component.start();
-    //
-    // let vpmdriver = static_init!(
-    // capsules::vpp::ProcessManagerConsoleCap::VPMDriver,
-    // capsules::vpp::ProcessManagerConsoleCap::VPMDriver::new(vpp_process_component)) ;
-    // vpp_process_component.start();
-
-
-
-
 
 
     let scheduler = components::sched::priority::PriorityComponent::new(board_kernel).finalize(());

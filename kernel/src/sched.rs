@@ -356,7 +356,7 @@ impl Kernel {
     /// useful if an app identifier is passed to the kernel from somewhere (such
     /// as from userspace) and needs to be expanded to a full `AppId` for use
     /// with other APIs.
-    pub(crate) fn lookup_app_by_identifier(&self, identifier: usize) -> Option<AppId> {
+    pub fn lookup_app_by_identifier(&self, identifier: usize) -> Option<AppId> {
         self.processes.iter().find_map(|&p| {
             p.map_or(None, |p2| {
                 if p2.appid().id() == identifier {

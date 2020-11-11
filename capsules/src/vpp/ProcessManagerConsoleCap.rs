@@ -168,8 +168,8 @@ impl <'a,C: ProcessManagementCapability> ProcessConsole<'a, C> {
                              let argument = clean_str.split_whitespace().nth(1);
                              if argument.is_some(){
                                  if argument.unwrap() == self.vppkernel.vpp_processes[0].as_ref().unwrap().get_process_name() {
-                                     let handle=self.vppkernel._mk_get_process_handle(0);
-                                     self.vppkernel._mk_resume_process(handle);
+                                     let handle=self.vppkernel._mk_Get_Process_Handle(0);
+                                     self.vppkernel._mk_resume_process(handle.unwrap());
                                      self.vppkernel._mk_resume_process(1);
                                  }else {
                                      debug!("Name of Process non existant");
@@ -182,8 +182,8 @@ impl <'a,C: ProcessManagementCapability> ProcessConsole<'a, C> {
                             let argument = clean_str.split_whitespace().nth(1);
                             if argument.is_some(){
                                 if argument.unwrap() == self.vppkernel.vpp_processes[0].as_ref().unwrap().get_process_name() {
-                                    let handle=self.vppkernel._mk_get_process_handle(0);
-                                    self.vppkernel._mk_suspend_process(handle);
+                                    let handle=self.vppkernel._mk_Get_Process_Handle(0);
+                                    self.vppkernel._mk_suspend_process(handle.unwrap());
                                     self.vppkernel._mk_suspend_process(1);
                                 }else {
                                     debug!("Name of Process non existant");

@@ -89,7 +89,8 @@ impl<L, T> AppSlice<L, T> {
 
     /// Provide access to one app's AppSlice to another app. This is used for
     /// IPC.
-    pub(crate) unsafe fn expose_to(&self, appid: AppId) -> bool {
+    /// change back to private (crate)
+    pub unsafe fn expose_to(&self, appid: AppId) -> bool {
         if appid != self.ptr.process {
             self.ptr
                 .process

@@ -10,13 +10,12 @@ use crate::vpp::mloi::MK_Process_ID_u;
 use crate::vpp::mailbox::mbox;
 use crate::vpp::ipc::ipc;
 use kernel::{Kernel, Chip, config};
-use kernel::capabilities::ProcessManagementCapability;
+use kernel::capabilities::{ProcessManagementCapability,MemoryAllocationCapability};
 use core::convert::TryInto;
 use kernel::tbfheader;
 use crate::vpp;
-use kernel::{debug, static_init};
+use kernel::{debug, static_init,create_capability};
 use crate::vpp::vppkernel::NUM_PROCS;
-use crate::net::thread::tlv::BorderRouterTlvValueBit::S;
 
 #[derive(Clone)]
 pub struct VppProcess {
@@ -24,6 +23,7 @@ pub struct VppProcess {
     pub(crate) vppstate: Cell<VppState>,
     pub(crate) vpppriority: Cell<MK_PROCESS_PRIORITY_e>,
     pub(crate) vppid: Cell<MK_Process_ID_u>,
+    pub(crate) error: Cell<MK_ERROR_e>,
 }
 /// This is a replication of `load_processes` function by tock with the addition of VPP
 /// Process specification. It returns an array `procs` of VPP Processes.
@@ -37,7 +37,7 @@ pub unsafe fn  load_vpp_processes<C: Chip>(
     fault_response: FaultResponse,
     _capability: &dyn ProcessManagementCapability)
     -> Result<(), ProcessLoadError> {
-    // I am importing these symbole to calculate SRAM and FLASH Addresses from the main function
+    // I am importing these symbols to calculate SRAM and FLASH Addresses from the main function
     /// These symbols are defined in the linker script.
     /// These variables refer to the start and length of SRAM and FLASH Addresses.
     /// They are used in load_processes function to parse the TBF header and
@@ -74,7 +74,38 @@ pub unsafe fn  load_vpp_processes<C: Chip>(
             app_memory.as_ptr() as usize + app_memory.len() - 1
         );
     }
-    debug!("COM_VPP_ID is          {:#06X}",    MK_PROCESS_COM_VPP_ID);
+    // Before instantiating any Process, mailboxes and IPCs need to be instantiated. IPCs
+    // use grants which can no longer be used after calling the create() function. Declaring
+    // them out of the loop is a better option.
+    //There are 4 Mailboxes.
+    let mgt_main_mb = mbox::create_mgt_mb();
+    let com_main_mb = mbox::create_com_mb();
+    let main_mgt_mb = mbox::create_main_mgt_mb();
+    let main_com_mb = mbox::create_main_com_mb();
+    mbs[0] = Some(mgt_main_mb);
+    mbs[1] = Some(com_main_mb);
+    mbs[2] = Some(main_mgt_mb);
+    mbs[3] = Some(main_com_mb);
+    // There are 4 ipc structs
+    let memory_allocation_cap = create_capability!(MemoryAllocationCapability);
+    let main_com_ipc = ipc::create_main_com_ipc(kernel,&memory_allocation_cap);
+    let com_main_ipc = ipc::create_com_main_ipc(kernel,&memory_allocation_cap);
+    let main_mgt_ipc = ipc::create_main_mgt_ipc(kernel,&memory_allocation_cap);
+    let mgt_main_ipc = ipc::create_mgt_main_ipc(kernel,&memory_allocation_cap) ;
+    ipcs[0] = Some(main_com_ipc);
+    ipcs[1] = Some(com_main_ipc);
+    ipcs[2] = Some(main_mgt_ipc);
+    ipcs[3] = Some(mgt_main_ipc);
+
+
+    /* |15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0|
+  VPP : 1  0   ->>>>>>>Enumerated ID<<<<<<<<-
+   For example MGT ID
+        1  0 0  0 | 0  0  0 0| 0 0 0 0|0 0 0 1
+            8            0        0        1
+            MGT Process ID is 0x8001
+    */
+   /* debug!("COM_VPP_ID is          {:#06X}",    MK_PROCESS_COM_VPP_ID);
     debug!("MGT_VPP_ID is          {:#06X}",    MK_PROCESS_MGT_VPP_ID);
     debug!("MAIN_APP_ID is         {:#06X}",    MK_PROCESS_MAIN_APP_ID);
 
@@ -87,7 +118,7 @@ pub unsafe fn  load_vpp_processes<C: Chip>(
     debug!("IPC COM_MAIN_ID is     {:#06X}",    MK_IPC_COM_MAIN_ID);
     debug!("IPC MAIN_COM_ID is     {:#06X}",    MK_IPC_MAIN_COM_ID);
     debug!("IPC MAIN_MGT_ID is     {:#06X}",    MK_IPC_MAIN_MGT_ID);
-
+*/
 
     let mut remaining_flash = app_flash;
     let mut remaining_memory = app_memory;
@@ -238,25 +269,6 @@ pub unsafe fn  load_vpp_processes<C: Chip>(
         vpp_procs[0] = Some(mgt_process);
         vpp_procs[1] = Some(com_process);
         vpp_procs[2] = Some(main_process);
-        //There are 4 Mailboxes.
-        let mgt_main_mb = mbox::create_mgt_mb();
-        let com_main_mb = mbox::create_com_mb();
-        let main_mgt_mb = mbox::create_main_mgt_mb();
-        let main_com_mb = mbox::create_main_com_mb();
-        mbs[0] = Some(mgt_main_mb);
-        mbs[1] = Some(com_main_mb);
-        mbs[2] = Some(main_mgt_mb);
-        mbs[3] = Some(main_com_mb);
-        // There are 4 ipc structs
-        let main_com_ipc = ipc::create_main_com_ipc();
-        let com_main_ipc = ipc::create_com_main_ipc();
-        let main_mgt_ipc = ipc::create_main_mgt_ipc();
-        let mgt_main_ipc = ipc::create_mgt_main_ipc() ;
-        ipcs[0] = Some(main_com_ipc);
-        ipcs[1] = Some(com_main_ipc);
-        ipcs[2] = Some(main_mgt_ipc);
-        ipcs[3] = Some(mgt_main_ipc);
-
     }
     Ok(())
 }
@@ -271,6 +283,7 @@ impl  VppProcess{
             vppstate: Cell::new(VppState::SUSPENDED_R),
             vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_NORMAL),
             vppid: Cell::new(pid),
+            error: Cell::new(MK_ERROR_e::MK_ERROR_NONE)
         }
     }
     pub fn create_mgt_process(tockprocess: Option<&'static dyn ProcessType> ) -> VppProcess{
@@ -278,7 +291,8 @@ impl  VppProcess{
             tockprocess: tockprocess,
             vppstate: Cell::new(VppState::READY),
             vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_NORMAL),
-            vppid: Cell::new(MK_PROCESS_MGT_VPP_ID)
+            vppid: Cell::new(MK_PROCESS_MGT_VPP_ID),
+            error: Cell::new(MK_ERROR_e::MK_ERROR_NONE)
         }
     }
     pub fn create_com_process(tockprocess: Option<&'static dyn ProcessType>) -> VppProcess{
@@ -286,7 +300,8 @@ impl  VppProcess{
             tockprocess,
             vppstate: Cell::new(VppState::READY),
             vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_NORMAL),
-            vppid: Cell::new(MK_PROCESS_COM_VPP_ID)
+            vppid: Cell::new(MK_PROCESS_COM_VPP_ID),
+            error: Cell::new(MK_ERROR_e::MK_ERROR_NONE)
         }
     }
     pub fn create_main_process(tockprocess: Option<&'static dyn ProcessType>) -> VppProcess{
@@ -294,11 +309,12 @@ impl  VppProcess{
             tockprocess,
             vppstate: Cell::new(VppState::READY),
             vpppriority: Cell::new(MK_PROCESS_PRIORITY_e::MK_PROCESS_PRIORITY_NORMAL),
-            vppid: Cell::new(MK_PROCESS_MAIN_APP_ID)
+            vppid: Cell::new(MK_PROCESS_MAIN_APP_ID),
+            error: Cell::new(MK_ERROR_e::MK_ERROR_NONE)
         }
     }
 
-    pub(crate) fn snyc_tock_vpp_states(&self){
+    /*pub(crate) fn snyc_tock_vpp_states(&self){
         let tock_state = self.tockprocess.unwrap().get_state();
         match tock_state {
             State::Unstarted => self.vppstate.set(VppState::READY),
@@ -320,6 +336,9 @@ impl  VppProcess{
             VppState::DEAD => tock_process.set_state(State::StoppedFaulted),
             _ => {},
         }
+    }  */
+    pub(crate) fn get_last_generated_error(&self) -> MK_ERROR_e {
+        self.error.get()
     }
 
     pub(crate)fn get_vpp_id(&self) -> MK_Process_ID_u {
@@ -343,7 +362,7 @@ impl  VppProcess{
     }
 
     pub(crate) fn suspend_vpp_process(&self) {
-        self.snyc_tock_vpp_states();
+        // self.snyc_tock_vpp_states();
         match self.vppstate.get() {
             VppState::READY    => self.vppstate.set(SUSPENDED_R),
             VppState::RUNNING  => self.vppstate.set(SUSPENDED_R),
@@ -354,7 +373,7 @@ impl  VppProcess{
     }
 
     pub(crate) fn resume_vpp_process(&self) {
-        self.snyc_tock_vpp_states();
+        // self.snyc_tock_vpp_states();
         match self.vppstate.get() {
             VppState::SUSPENDED_R => self.vppstate.set(READY),
             VppState::SUSPENDED_W => self.vppstate.set(WAITING),
@@ -364,9 +383,16 @@ impl  VppProcess{
     }
 
     pub(crate) fn yield_vpp_process(&self) {
-        self.snyc_tock_vpp_states();
+        // self.snyc_tock_vpp_states();
         match self.vppstate.get() {
             VppState::RUNNING => self.vppstate.set(READY),
+            _                 => {},
+        }
+    }
+
+    pub (crate) fn waiting_vpp_process(&self) {
+        match self.vppstate.get() {
+            VppState::RUNNING => self.vppstate.set(WAITING),
             _                 => {},
         }
     }
@@ -374,6 +400,7 @@ impl  VppProcess{
     pub(crate) fn set_vpp_id(&self, id :MK_Process_ID_u ) {
         self.vppid.set(id);
     }
+
     pub(crate) fn get_process_name(&self)-> &'static str{
         self.tockprocess.unwrap().get_process_name()
     }

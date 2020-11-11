@@ -1057,7 +1057,7 @@ impl<C: Chip> ProcessType for Process<'_, C> {
         if stack_pointer >= self.mem_start() && stack_pointer < self.mem_end() {
             self.debug.map(|debug| {
                 debug.app_stack_start_pointer = Some(stack_pointer);
-
+                debug!("stack_pointer {:?}", stack_pointer);
                 // We also reset the minimum stack pointer because whatever value
                 // we had could be entirely wrong by now.
                 debug.min_stack_pointer = stack_pointer;
@@ -1069,6 +1069,8 @@ impl<C: Chip> ProcessType for Process<'_, C> {
         if heap_pointer >= self.mem_start() && heap_pointer < self.mem_end() {
             self.debug.map(|debug| {
                 debug.app_heap_start_pointer = Some(heap_pointer);
+                debug!("heap_pointer {:?}", heap_pointer);
+
             });
         }
     }
@@ -1117,6 +1119,8 @@ impl<C: Chip> ProcessType for Process<'_, C> {
         }
 
         let new_break = unsafe { self.app_break.get().offset(increment) };
+        debug!("new_sbreak {:?}", new_break);
+
         self.brk(new_break)
     }
 
@@ -1143,6 +1147,8 @@ impl<C: Chip> ProcessType for Process<'_, C> {
                     let old_break = self.app_break.get();
                     self.app_break.set(new_break);
                     self.chip.mpu().configure_mpu(&config, &self.appid());
+                    debug!("new_brk {:?}", new_break);
+
                     Ok(old_break)
                 }
             })
@@ -1253,6 +1259,8 @@ impl<C: Chip> ProcessType for Process<'_, C> {
             let grant_pointer_array = self.mem_end() as *const *mut u8;
             *grant_pointer_array.offset(-(grant_num + 1))
         };
+        // debug!("grant_pointer {:?}", grant_pointer);
+
         Some(grant_pointer)
     }
 
@@ -1267,6 +1275,8 @@ impl<C: Chip> ProcessType for Process<'_, C> {
         let grant_pointer_array = self.mem_end() as *mut *mut u8;
         let grant_pointer_pointer = grant_pointer_array.offset(-(grant_num + 1));
         *grant_pointer_pointer = grant_ptr;
+        debug!("grant_pointer {:?}", grant_pointer_pointer);
+
     }
 
     fn get_process_name(&self) -> &'static str {
@@ -1618,7 +1628,7 @@ impl<C: 'static + Chip> Process<'_, C> {
         let header_flash = app_flash
             .get(0..header_length as usize)
             .ok_or(ProcessLoadError::NotEnoughFlash)?;
-
+        debug!("app_flash {:?}", header_flash.as_ptr());
         // Parse the full TBF header to see if this is a valid app. If the
         // header can't parse, we will error right here.
         let tbf_header = tbfheader::parse_tbf_header(header_flash, app_version)?;
@@ -1668,9 +1678,13 @@ impl<C: 'static + Chip> Process<'_, C> {
 
         // Otherwise, actually load the app.
         let mut min_app_ram_size = tbf_header.get_minimum_app_ram_size() as usize;
+        // debug!("min_app_ram_size {:#010X}", min_app_ram_size);
         let init_fn = app_flash
             .as_ptr()
             .offset(tbf_header.get_init_function_offset() as isize) as usize;
+        // debug!("init_fn {:#010X}", init_fn);
+        // debug!("app_flash {:?} and end {:?}", app_flash.as_ptr(),
+        //        app_flash.as_ptr() as usize + app_flash.len());
 
         // Initialize MPU region configuration.
         let mut mpu_config: <<C as Chip>::MPU as MPU>::MpuConfig = Default::default();
@@ -1706,14 +1720,16 @@ impl<C: 'static + Chip> Process<'_, C> {
         let grant_ptr_size = mem::size_of::<*const usize>();
         let grant_ptrs_num = kernel.get_grant_count_and_finalize();
         let grant_ptrs_offset = grant_ptrs_num * grant_ptr_size;
-
+        // debug!("grant_ptrs_offset {:#010X}", grant_ptrs_offset);
         // Allocate memory for callback ring buffer.
         let callback_size = mem::size_of::<Task>();
         let callback_len = 10;
         let callbacks_offset = callback_len * callback_size;
+        // debug!("callback_offset {:#010X}", callbacks_offset);
 
         // Make room to store this process's metadata.
         let process_struct_offset = mem::size_of::<Process<C>>();
+        // debug!("process_struct_offset {:#010X}", process_struct_offset);
 
         // Initial sizes of the app-owned and kernel-owned parts of process
         // memory. Provide the app with plenty of initial process accessible
@@ -1728,6 +1744,7 @@ impl<C: 'static + Chip> Process<'_, C> {
 
         // Minimum memory size for the process.
         let min_total_memory_size = min_app_ram_size + initial_kernel_memory_size;
+        // debug!("min_total_memory_size {:#010X}", min_total_memory_size);
 
         // Check if this process requires a fixed memory start address. If so,
         // try to adjust the memory region to work for this process.
@@ -1735,6 +1752,7 @@ impl<C: 'static + Chip> Process<'_, C> {
         // Right now, we only support skipping some RAM and leaving a chunk
         // unused so that the memory region starts where the process needs it
         // to.
+
         let remaining_memory = if let Some(fixed_memory_start) = tbf_header.get_fixed_address_ram()
         {
             // The process does have a fixed address.
@@ -1773,6 +1791,8 @@ impl<C: 'static + Chip> Process<'_, C> {
         } else {
             remaining_memory
         };
+        // debug!("remaining_memory  {:?}", remaining_memory.as_ptr());
+        // debug!("remaining_memory length {:#010X}", remaining_memory.len());
 
         // Determine where process memory will go and allocate MPU region for
         // app-owned memory.
@@ -1800,7 +1820,8 @@ impl<C: 'static + Chip> Process<'_, C> {
                 return Err(ProcessLoadError::NotEnoughMemory);
             }
         };
-
+        // debug!("app_memory_start  {:?}", app_memory_start);
+        // debug!("app_memory_size length {:#010X}", app_memory_size);
         // Get a slice for the memory dedicated to the process. This can fail if
         // the MPU returns a region of memory that is not inside of the
         // `remaining_memory` slice passed to `create()` to allocate the
@@ -1808,13 +1829,19 @@ impl<C: 'static + Chip> Process<'_, C> {
         let memory_start_offset = app_memory_start as usize - remaining_memory.as_ptr() as usize;
         // First split the remaining memory into a slice that contains the
         // process memory and a slice that will not be used by this process.
+        debug!("memory_start_offset  {:?}", memory_start_offset);
+
         let (app_memory_oversize, unused_memory) =
             remaining_memory.split_at_mut(memory_start_offset + app_memory_size);
         // Then since the process's memory need not start at the beginning of
         // the remaining slice given to create(), get a smaller slice as needed.
+        // debug!("app_memory_oversize  {:?}", app_memory_oversize.as_ptr());
+        // debug!("unused_memory  {:?}", unused_memory.as_ptr());
+
         let app_memory = app_memory_oversize
             .get_mut(memory_start_offset..)
             .ok_or(ProcessLoadError::InternalError)?;
+        // debug!("app_memory  {:?}", app_memory.as_ptr());
 
         // Check if the memory region is valid for the process. If a process
         // included a fixed address for the start of RAM in its TBF header (this
@@ -1838,10 +1865,15 @@ impl<C: 'static + Chip> Process<'_, C> {
 
         // Set up initial grant region.
         let mut kernel_memory_break = app_memory.as_mut_ptr().add(app_memory.len());
+        // debug!("initial_stack_pointer  {:?}", initial_stack_pointer);
+        // debug!("initial_sbrk_pointer  {:?}", initial_sbrk_pointer);
+        // debug!("app_memory len  {:?}", app_memory.len());
+        // debug!("kernel_memory_break  {:?}", kernel_memory_break);
 
         // Now that we know we have the space we can setup the grant
         // pointers.
         kernel_memory_break = kernel_memory_break.offset(-(grant_ptrs_offset as isize));
+        // debug!("kernel_memory_break after grts ptr offser  {:?}", kernel_memory_break);
 
         // This is safe today, as MPU constraints ensure that `memory_start`
         // will always be aligned on at least a word boundary, and that
@@ -1862,6 +1894,7 @@ impl<C: 'static + Chip> Process<'_, C> {
         // Now that we know we have the space we can setup the memory for the
         // callbacks.
         kernel_memory_break = kernel_memory_break.offset(-(callbacks_offset as isize));
+        // debug!("kernel_memory_break  after  callback offset {:?}", kernel_memory_break);
 
         // This is safe today, as MPU constraints ensure that `memory_start`
         // will always be aligned on at least a word boundary, and that
@@ -1876,11 +1909,10 @@ impl<C: 'static + Chip> Process<'_, C> {
         let callback_buf =
             slice::from_raw_parts_mut(kernel_memory_break as *mut Task, callback_len);
         let tasks = RingBuffer::new(callback_buf);
-        debug!(" ringbuffer slices {:?} ",tasks.available_len());
-
         // Last thing in the kernel region of process RAM is the process struct.
         kernel_memory_break = kernel_memory_break.offset(-(process_struct_offset as isize));
         let process_struct_memory_location = kernel_memory_break;
+        // debug!("kernel_memory_break  after process struct{:?}", kernel_memory_break);
 
         // Determine the debug information to the best of our understanding.
         // Since processes have to do their own setup (allocating a stack and
@@ -1978,6 +2010,7 @@ impl<C: 'static + Chip> Process<'_, C> {
                 process
                     .current_stack_pointer
                     .set(new_stack_pointer as *mut u8);
+                debug!("new_stack_pointer {:?}", new_stack_pointer);
                 process.debug_set_max_stack_depth();
             }
             _ => {
