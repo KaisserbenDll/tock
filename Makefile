@@ -424,7 +424,7 @@ ci-job-kernel:
 ci-job-capsules:
 	$(call banner,CI-Job: Capsules)
 	@# Capsule initialization depends on board/chip specific imports, so ignore doc tests
-	@cd capsules && CI=true RUSTFLAGS="-D warnings" TOCK_KERNEL_VERSION=ci_test cargo test --lib
+	@cd capsules && CI=true RUSTFLAGS="-D warnings" TOCK_KERNEL_VERSION=ci_test cargo test --lib --examples
 
 .PHONY: ci-job-chips
 ci-job-chips:
@@ -499,21 +499,24 @@ define ci_setup_qemu_riscv
 	@# Use the latest QEMU as it has OpenTitan support
 	@printf "Building QEMU, this could take a few minutes\n\n"
 	@git submodule sync; git submodule update --init
-	@mkdir -p tools/qemu-build && cd tools/qemu-build; ../qemu/configure --target-list=riscv32-softmmu;
+	@cd tools/qemu; ../qemu/configure --target-list=riscv32-softmmu --disable-linux-io-uring --disable-libdaxctl;
 	@# Build qemu
-	@$(MAKE) -C "tools/qemu-build" || (echo "You might need to install some missing packages" || exit 127)
+	@$(MAKE) -C "tools/qemu/build" || (echo "You might need to install some missing packages" || exit 127)
 endef
 
 define ci_setup_qemu_opentitan
 	$(call banner,CI-Setup: Get OpenTitan boot ROM image)
-	# Download OpenTitan image
-	@printf "Downloading OpenTitan boot rom from: 4429c362900713c059fbd870db140e0058e1c0eb\n"
+	# Download OpenTitan image. The latest image URL is available at
+	# https://storage.googleapis.com/artifacts.opentitan.org/latest.txt
+	# We download a fixed version so that new OpenTitan images do not
+	# unexpectedly change OpenTitan's behavior in our CI.
+	@printf "Downloading OpenTitan boot ROM\n"
 	@pwd=$$(pwd) && \
 		temp=$$(mktemp -d) && \
 		cd $$temp && \
-		curl $$(curl "https://dev.azure.com/lowrisc/opentitan/_apis/build/builds/23197/artifacts?artifactName=opentitan-dist&api-version=5.1" | cut -d \" -f 38) --output opentitan-dist.zip; \
-		unzip opentitan-dist.zip; \
-		tar -xf opentitan-dist/opentitan-snapshot-20191101-*.tar.xz; \
+		curl 'https://storage.googleapis.com/artifacts.opentitan.org/opentitan-snapshot-20191101-1-2744-g528004a3.tar.xz' \
+			--output opentitan-dist.tar.xz; \
+		tar -xf opentitan-dist.tar.xz; \
 		mv opentitan-snapshot-20191101-*/sw/device/boot_rom/boot_rom_fpga_nexysvideo.elf $$pwd/tools/qemu-runner/opentitan-boot-rom.elf
 endef
 
@@ -522,12 +525,12 @@ ci-setup-qemu:
 	$(call ci_setup_helper,\
 		status=$$(git submodule status -- tools/qemu); \
 		[[ "$${status:0:1}" != "" ]] && \
-			cd tools/qemu-build && make -q riscv32-softmmu && echo yes,\
+			cd tools/qemu/build && make -q riscv32-softmmu && echo yes,\
 		Clone QEMU and run its build scripts,\
 		ci_setup_qemu_riscv,\
 		CI_JOB_QEMU_RISCV)
 	$(call ci_setup_helper,\
-		[[ $$(cksum tools/qemu-runner/opentitan-boot-rom.elf | cut -d" " -f1) == "2835238144" ]] && echo yes,\
+		[[ $$(cksum tools/qemu-runner/opentitan-boot-rom.elf | cut -d" " -f1) == "328682170" ]] && echo yes,\
 		Download opentitan archive and unpack a ROM image,\
 		ci_setup_qemu_opentitan,\
 		CI_JOB_QEMU_OPENTITAN)
@@ -538,7 +541,7 @@ ci-setup-qemu:
 define ci_job_qemu
 	$(call banner,CI-Job: QEMU)
 	@cd tools/qemu-runner;\
-		PATH="$(shell pwd)/tools/qemu-build/riscv32-softmmu/:${PATH}"\
+		PATH="$(shell pwd)/tools/qemu/build/riscv32-softmmu/:${PATH}"\
 		CI=true cargo run
 endef
 
@@ -546,6 +549,10 @@ endef
 ci-job-qemu: ci-setup-qemu
 	$(if $(CI_JOB_QEMU),$(call ci_job_qemu))
 
+.PHONY: board-release-test
+board-release-test:
+	@cd tools/board-runner;\
+		cargo run ${TARGET}
 
 
 ### ci-runner-netlify jobs:
