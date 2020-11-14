@@ -1613,7 +1613,6 @@ fn exceeded_check(size: usize, allocated: usize) -> &'static str {
 }
 
 impl<C: 'static + Chip> Process<'_, C> {
-    // pub(crate) unsafe fn create(
     pub unsafe fn create(
         kernel: &'static Kernel,
         chip: &'static C,
@@ -1628,7 +1627,7 @@ impl<C: 'static + Chip> Process<'_, C> {
         let header_flash = app_flash
             .get(0..header_length as usize)
             .ok_or(ProcessLoadError::NotEnoughFlash)?;
-        debug!("app_flash {:?}", header_flash.as_ptr());
+        debug!("app_flash {:?}", app_flash.as_ptr());
         // Parse the full TBF header to see if this is a valid app. If the
         // header can't parse, we will error right here.
         let tbf_header = tbfheader::parse_tbf_header(header_flash, app_version)?;
@@ -1688,7 +1687,39 @@ impl<C: 'static + Chip> Process<'_, C> {
 
         // Initialize MPU region configuration.
         let mut mpu_config: <<C as Chip>::MPU as MPU>::MpuConfig = Default::default();
-
+       /* extern "C" {
+            static _svppapp: u8;
+            static _evppapp: u8;
+        }
+        let vpp_app = core::slice::from_raw_parts(
+            &_svppapp as *const u8,
+            &_evppapp as *const u8 as usize - &_svppapp as *const u8 as usize);
+        debug!(
+            "[!] VPP flash={:#010X} until  :{:#010X}",
+            vpp_app.as_ptr() as usize ,
+            vpp_app.as_ptr() as usize  + vpp_app.len() ,
+        );
+        // Allocate MPU region for VPP NVM.
+        if chip
+            .mpu()
+            .allocate_region(
+                vpp_app.as_ptr(),
+                vpp_app.len(),
+                vpp_app.len(),
+                mpu::Permissions::ReadWriteExecute,
+                &mut mpu_config,
+            ).is_none()
+        {
+            if config::CONFIG.debug_load_processes {
+                debug!(
+                    "[!] VPP flash={:#010X}-{:#010X} process={:?} - couldn't allocate MPU region for flash",
+                    vpp_app.as_ptr() as usize,
+                    vpp_app.as_ptr() as usize + vpp_app.len() - 1,
+                    process_name
+                );
+            }
+            return Err(ProcessLoadError::MpuInvalidFlashLength);
+        }*/
         // Allocate MPU region for flash.
         if chip
             .mpu()
@@ -1711,7 +1742,6 @@ impl<C: 'static + Chip> Process<'_, C> {
             }
             return Err(ProcessLoadError::MpuInvalidFlashLength);
         }
-
         // Determine how much space we need in the application's
         // memory space just for kernel and grant state. We need to make
         // sure we allocate enough memory just for that.
@@ -1737,7 +1767,7 @@ impl<C: 'static + Chip> Process<'_, C> {
         let initial_kernel_memory_size =
             grant_ptrs_offset + callbacks_offset + process_struct_offset;
         let initial_app_memory_size = 3 * 1024;
-
+        debug!("mem {:#X}", initial_kernel_memory_size + initial_app_memory_size);
         if min_app_ram_size < initial_app_memory_size {
             min_app_ram_size = initial_app_memory_size;
         }
@@ -1792,7 +1822,7 @@ impl<C: 'static + Chip> Process<'_, C> {
             remaining_memory
         };
         // debug!("remaining_memory  {:?}", remaining_memory.as_ptr());
-        // debug!("remaining_memory length {:#010X}", remaining_memory.len());
+         debug!("remaining_memory length {:#010X}", remaining_memory.len());
 
         // Determine where process memory will go and allocate MPU region for
         // app-owned memory.
@@ -1820,6 +1850,7 @@ impl<C: 'static + Chip> Process<'_, C> {
                 return Err(ProcessLoadError::NotEnoughMemory);
             }
         };
+
         // debug!("app_memory_start  {:?}", app_memory_start);
         // debug!("app_memory_size length {:#010X}", app_memory_size);
         // Get a slice for the memory dedicated to the process. This can fail if

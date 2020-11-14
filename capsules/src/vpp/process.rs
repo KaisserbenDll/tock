@@ -9,13 +9,14 @@ use crate::vpp::mloi::VppState::*;
 use crate::vpp::mloi::MK_Process_ID_u;
 use crate::vpp::mailbox::mbox;
 use crate::vpp::ipc::ipc;
-use kernel::{Kernel, Chip, config};
+use kernel::{Kernel, Chip, config, mpu};
 use kernel::capabilities::{ProcessManagementCapability,MemoryAllocationCapability};
 use core::convert::TryInto;
 use kernel::tbfheader;
 use crate::vpp;
 use kernel::{debug, static_init,create_capability};
 use crate::vpp::vppkernel::NUM_PROCS;
+use kernel::mpu::MPU;
 
 #[derive(Clone)]
 pub struct VppProcess {
@@ -96,8 +97,6 @@ pub unsafe fn  load_vpp_processes<C: Chip>(
     ipcs[1] = Some(com_main_ipc);
     ipcs[2] = Some(main_mgt_ipc);
     ipcs[3] = Some(mgt_main_ipc);
-
-
     /* |15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0|
   VPP : 1  0   ->>>>>>>Enumerated ID<<<<<<<<-
    For example MGT ID
@@ -118,6 +117,18 @@ pub unsafe fn  load_vpp_processes<C: Chip>(
     debug!("IPC COM_MAIN_ID is     {:#06X}",    MK_IPC_COM_MAIN_ID);
     debug!("IPC MAIN_COM_ID is     {:#06X}",    MK_IPC_MAIN_COM_ID);
     debug!("IPC MAIN_MGT_ID is     {:#06X}",    MK_IPC_MAIN_MGT_ID);
+    COM_VPP_ID is          0x8000
+MGT_VPP_ID is          0x8001
+MAIN_APP_ID is         0x4000
+Mailbox COM_MAIN_ID is 0x8000
+Mailbox MGT_MAIN_ID is 0x8001
+Mailbox MAIN_COM_ID is 0x4000
+Mailbox MAIN_MGT_ID is 0x4001
+IPC MGT_MAIN_ID is     0x8001
+IPC COM_MAIN_ID is     0x8000
+IPC MAIN_COM_ID is     0x4000
+IPC MAIN_MGT_ID is     0x4001
+
 */
 
     let mut remaining_flash = app_flash;

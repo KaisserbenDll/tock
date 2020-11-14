@@ -3,7 +3,7 @@
 
 use core::cell::Cell;
 use kernel::hil::time::{self, Alarm, Frequency, Ticks, Ticks32};
-use kernel::{AppId, Callback, Driver, Grant, ReturnCode};
+use kernel::{AppId, Callback, Driver, Grant, ReturnCode,debug};
 
 /// Syscall driver number.
 use crate::driver;
@@ -206,6 +206,7 @@ impl<'a, A: Alarm<'a>> Driver for AlarmDriver<'a, A> {
                         (ReturnCode::SuccessWithValue { value: freq }, false)
                     },
                     2 /* capture time */ => {
+                        debug!("time by kernel {:?}", now.into_u32());
                         (ReturnCode::SuccessWithValue { value: now.into_u32() as usize },
                          false)
                     },

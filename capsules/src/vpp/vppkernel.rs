@@ -494,14 +494,21 @@ impl Driver  for vpp_kernel_driver {
                     else { ReturnCode::SuccessWithValue {value: 0}}
                 },
             5 => {
+               /* debug!("data {:?}",data);
                 let handle =
                     self
                         .vpp_kernel
                         ._mk_Get_Mailbox_Handle(data as MK_MAILBOX_ID_u);
 
                 if handle.is_some() {ReturnCode::SuccessWithValue {value: handle.unwrap() as usize} }
-                else { ReturnCode::FAIL}
+                else { ReturnCode::FAIL}*/
+                let error = self.vpp_kernel.
+                    _mk_Send_Signal( data as MK_HANDLE_t,
+                                     data2 as MK_BITMAP_t
 
+                    ).into();
+
+                ReturnCode::SuccessWithValue {value:error}
             },
             6 => {
                 // debug!("Sending a Signal");
@@ -521,6 +528,12 @@ impl Driver  for vpp_kernel_driver {
                     ReturnCode::SuccessWithValue {value: bitmap.unwrap() as usize }
                 }
                 else { ReturnCode::FAIL}
+            },
+            15 => {
+                debug!("Useless Print");
+                debug!("Shared Buffer {:?}",data as usize);
+
+                ReturnCode::SUCCESS
             },
             /*10 => {
                 let shared_address = self.vpp_kernel._mk_Get_Access_IPC(data as u32,appid)?;
@@ -546,14 +559,30 @@ impl Driver  for vpp_kernel_driver {
         let ret = ipc.data.enter(appid, |data,_| {
             let tmp = shared_mem.as_ref().unwrap().ptr();
             debug!("Address shared buff {:?}",tmp);
-            data.shared_memory= shared_mem;
+            data.shared_memory = shared_mem;
             ReturnCode::SuccessWithValue {value: tmp as usize}
         }).unwrap_or(ReturnCode::EBUSY);
-        let index = ipc.get_writer_proc_i();
-        let caller_id = self.vpp_kernel.kernel.lookup_app_by_identifier(index as usize);
-        if Some(appid) == caller_id {
-            ipc.expose_slice_to_app(caller_id.unwrap(), appid);
-        }
+        let caller_id = self.vpp_kernel.kernel.lookup_app_by_identifier(0);
+        ipc.expose_slice_to_app(caller_id.unwrap(), appid);
+
         ret
+    }
+    fn subscribe(
+        &self,
+        ipc_handle: usize,
+        callback: Option<Callback>,
+        app_id: AppId,
+    ) -> ReturnCode {
+        let ipc_wrapped = self.vpp_kernel.Get_IPC_ref_internal(ipc_handle as u32);
+        let ipc = ipc_wrapped.unwrap();
+        let ret = ipc.data.enter(app_id, |data,_| {
+            data.callback = callback;
+            data.callback.unwrap().schedule(0,0,0);
+            ReturnCode::SuccessWithValue {value: 0x007}
+        }).unwrap_or(ReturnCode::EBUSY);
+
+
+        ret
+
     }
 }

@@ -197,6 +197,7 @@ impl Callback {
     /// The arguments (`r0-r2`) are the values passed back to the process and
     /// are specific to the individual `Driver` interfaces.
     pub fn schedule(&mut self, r0: usize, r1: usize, r2: usize) -> bool {
+        debug!("r0 {:#x},r1 {:#x},r2 {:#x}, app_data: {:#x}", r0,r1,r2,self.appdata);
         let res = self
             .app_id
             .kernel
@@ -210,9 +211,10 @@ impl Callback {
                     pc: self.fn_ptr.as_ptr() as usize,
                 }))
             });
+        debug!("r0 {:#x},r1 {:#x},r2 {:#x}", r0,r1,r2);
         if config::CONFIG.trace_syscalls {
             debug!(
-                "[{:?}] schedule[{:#x}:{}] @{:#x}({:#x}, {:#x}, {:#x}, {:#x}) = {}",
+                "[{:?}] schedule[{:#x}:{:#x}] @{:#x}({:#x}, {:#x}, {:#x}, {:#x}) = {}",
                 self.app_id,
                 self.callback_id.driver_num,
                 self.callback_id.subscribe_num,

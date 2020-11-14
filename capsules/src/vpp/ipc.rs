@@ -4,7 +4,7 @@
 #![allow(non_snake_case)]
 use crate::vpp::mloi::*;
 use core::cell::Cell;
-use kernel::{AppSlice, Shared, Grant, Kernel, AppId,debug};
+use kernel::{AppSlice, Shared, Grant, Kernel, AppId, debug, Callback};
 use kernel::capabilities::MemoryAllocationCapability;
 use core::borrow::{BorrowMut, Borrow};
 
@@ -13,6 +13,8 @@ pub struct ipcData {
     /// An array of app slices that this application has shared with other
     /// applications.
     pub(crate) shared_memory:Option<AppSlice<Shared, u8>>,
+    pub (crate) callback: Option<Callback>,
+
 }
 pub struct ipc {
     ipc_id: Cell<MK_IPC_ID_u>,
@@ -93,10 +95,10 @@ impl  ipc{
 
 
     pub fn expose_slice_to_app(&self, caller_id: AppId, exposer_id: AppId) -> bool{
-        debug!("wsilt hne");
-        self.data.enter(exposer_id,|data2,_|{
+        debug!("Here");
+        self.data.enter(exposer_id,|data,_|{
                 // expose slices in data2 to data1
-                let slice = data2.shared_memory.as_ref().unwrap();
+                let slice = data.shared_memory.as_ref().unwrap();
                 unsafe {slice.expose_to(caller_id)};
                 true
         }).unwrap_or(false)

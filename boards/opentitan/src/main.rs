@@ -15,7 +15,7 @@ use kernel::common::dynamic_deferred_call::{DynamicDeferredCall, DynamicDeferred
 use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::i2c::I2CMaster;
-use kernel::hil::time::Alarm;
+use kernel::hil::time::{Alarm, Time, Counter};
 use kernel::Chip;
 use kernel::Platform;
 use kernel::{create_capability, debug, static_init};
@@ -218,6 +218,8 @@ pub unsafe fn reset_handler() {
 
     let alarm = &earlgrey::timer::TIMER;
     alarm.setup();
+    alarm.start();
+    debug!("Now is {:?}",alarm.now().into_u64());
 
     // Create a shared virtualization mux layer on top of a single hardware
     // alarm.
@@ -342,7 +344,6 @@ pub unsafe fn reset_handler() {
          });
         //_vpp_kernel._mk_resume_process(0);
         //_vpp_kernel._mk_resume_process(1);
-
 
     let scheduler = components::sched::priority::PriorityComponent::new(board_kernel).finalize(());
     board_kernel.kernel_loop(&opentitan, chip, Some(&opentitan.ipc), scheduler, &main_loop_cap);
