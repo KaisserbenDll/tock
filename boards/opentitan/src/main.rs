@@ -10,18 +10,20 @@
 
 use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
 use capsules::virtual_hmac::VirtualMuxHmac;
+use earlgrey::chip::EarlGreyDefaultPeripherals;
 use kernel::capabilities;
 use kernel::common::dynamic_deferred_call::{DynamicDeferredCall, DynamicDeferredCallClientState};
 use kernel::component::Component;
 use kernel::hil;
 use kernel::hil::i2c::I2CMaster;
-use kernel::hil::time::{Alarm, Time, Counter};
+use kernel::hil::time::Alarm;
 use kernel::Chip;
 use kernel::Platform;
 use kernel::{create_capability, debug, static_init};
 use rv32i::csr;
 use capsules::vpp::process::VppProcess;
 use capsules::vpp::vppkernel::VppKernel;
+
 #[allow(dead_code)]
 mod aes_test;
 
@@ -78,7 +80,9 @@ struct OpenTitan {
     i2c_master: &'static capsules::i2c_master::I2CMasterDriver<lowrisc::i2c::I2c<'static>>,
     pm : &'static capsules::vpp::pmsyscall::ProcessManager,
     vpp_driver: &'static capsules::vpp::vppkernel::vpp_kernel_driver,
-     // vpmdriver: &'static capsules::vpp::ProcessManagerConsoleCap::VPMDriver,
+    nonvolatile_storage: &'static capsules::nonvolatile_storage_driver::NonvolatileStorage<'static>,
+
+    // vpmdriver: &'static capsules::vpp::ProcessManagerConsoleCap::VPMDriver,
     // testdriver: &'static capsules::vpp::SubTest::Test,
 }
 
@@ -101,6 +105,7 @@ impl Platform for OpenTitan {
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::low_level_debug::DRIVER_NUM => f(Some(self.lldb)),
             capsules::i2c_master::DRIVER_NUM => f(Some(self.i2c_master)),
+            capsules::nonvolatile_storage_driver::DRIVER_NUM => f(Some(self.nonvolatile_storage)),
             _ => f(None),
         }
     }
@@ -117,6 +122,10 @@ pub unsafe fn reset_handler() {
     // Ibex-specific handler
     earlgrey::chip::configure_trap_handler();
 
+    let peripherals = static_init!(
+        EarlGreyDefaultPeripherals,
+        EarlGreyDefaultPeripherals::new()
+    );
     // initialize capabilities
     let process_mgmt_cap = create_capability!(capabilities::ProcessManagementCapability);
     let memory_allocation_cap = create_capability!(capabilities::MemoryAllocationCapability);
@@ -124,7 +133,6 @@ pub unsafe fn reset_handler() {
     let main_loop_cap = create_capability!(capabilities::MainLoopCapability);
 
     let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
-     let vpp_kernel = static_init!(VppKernel,VppKernel::new(&VPP_PROCESSES,&MBOX_ARRAY,&IPC_ARRAY,board_kernel));
 
 
     let dynamic_deferred_call_clients =
@@ -217,9 +225,6 @@ pub unsafe fn reset_handler() {
     .finalize(components::gpio_component_buf!(earlgrey::gpio::GpioPin));
 
     let alarm = &earlgrey::timer::TIMER;
-    alarm.setup();
-    alarm.start();
-    debug!("Now is {:?}",alarm.now().into_u64());
 
     // Create a shared virtualization mux layer on top of a single hardware
     // alarm.
@@ -246,6 +251,10 @@ pub unsafe fn reset_handler() {
         )
     );
     hil::time::Alarm::set_alarm_client(virtual_alarm_user, alarm);
+    // let vpp_kernel = static_init!(VppKernel,
+    // VppKernel::new(&VPP_PROCESSES,&MBOX_ARRAY,&IPC_ARRAY,board_kernel,virtual_alarm_user));
+    let vpp_kernel = static_init!(VppKernel,
+    VppKernel::new(&VPP_PROCESSES,&MBOX_ARRAY,&IPC_ARRAY,board_kernel));
 
     let chip = static_init!(
         earlgrey::chip::EarlGrey<VirtualMuxAlarm<'static, earlgrey::timer::RvTimer>>,
@@ -302,14 +311,30 @@ pub unsafe fn reset_handler() {
     // let testdriver = static_init!(capsules::vpp::SubTest::Test,
     // capsules::vpp::SubTest::Test::new(board_kernel.create_grant(&memory_allocation_cap)));
     // testdriver.trigger_callback();
+    extern "C" {
+        /// Beginning on the ROM region containing app images.
+        static _sstorage: u8;
+        static _estorage: u8;
+    }
 
+    // Flash
+    let nonvolatile_storage = components::nonvolatile_storage::NonvolatileStorageComponent::new(
+        board_kernel,
+        &peripherals.flash_ctrl,
+        0x20000000,                       // Start address for userspace accessible region
+        0x8000,                           // Length of userspace accessible region
+        &_sstorage as *const u8 as usize, // Start address of kernel region
+        &_estorage as *const u8 as usize - &_sstorage as *const u8 as usize, // Length of kernel region
+    )
+        .finalize(components::nv_storage_component_helper!(
+        lowrisc::flash_ctrl::FlashCtrl
+    ));
 
     let vpp_process_console = capsules::vpp::ProcessManagerConsoleCap
     ::ProcessConsoleComponent::new(vpp_kernel,uart_mux)
         .finalize(());
     vpp_process_console.start();
     debug!("OpenTitan initialisation complete. Entering main loop");
-
     let opentitan = OpenTitan {
         gpio: gpio,
         led: led,
@@ -321,7 +346,8 @@ pub unsafe fn reset_handler() {
         //usb,
         i2c_master,
         pm,
-        vpp_driver
+        vpp_driver,
+        nonvolatile_storage
     };
     // USB support is currently broken in the OpenTitan hardware
     // See https://github.com/lowRISC/opentitan/issues/2598 for more details
@@ -342,9 +368,10 @@ pub unsafe fn reset_handler() {
              debug!("Error loading processes!");
              debug!("{:?}", err);
          });
-        //_vpp_kernel._mk_resume_process(0);
-        //_vpp_kernel._mk_resume_process(1);
 
+    //_vpp_kernel._mk_resume_process(0);
+        //_vpp_kernel._mk_resume_process(1);
+        //panic!("Panic");
     let scheduler = components::sched::priority::PriorityComponent::new(board_kernel).finalize(());
     board_kernel.kernel_loop(&opentitan, chip, Some(&opentitan.ipc), scheduler, &main_loop_cap);
 }

@@ -2,7 +2,7 @@
 
 use crate::process::ProcessType;
 use crate::returncode::ReturnCode;
-
+// use crate::debug;
 /// Handle the `memop` syscall.
 ///
 /// ### `memop_num`
@@ -47,6 +47,8 @@ pub(crate) fn memop(process: &dyn ProcessType, op_type: usize, r1: usize) -> Ret
 
         // Op Type 1: SBRK
         1 /* SBRK */ => {
+            // let var = process.sbrk(r1 as isize);
+            // debug!("sbrk result {:?}", var);
             process.sbrk(r1 as isize)
                 .map(|addr| ReturnCode::SuccessWithValue { value: addr as usize })
                 .unwrap_or(ReturnCode::ENOMEM)

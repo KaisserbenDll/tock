@@ -7,7 +7,6 @@ use kernel::common::StaticRef;
 use kernel::hil::time;
 use kernel::hil::time::{Ticks, Ticks64, Time};
 use kernel::ReturnCode;
-use kernel::debug;
 
 const PRESCALE: u16 = ((CONFIG.cpu_freq / 10_000) - 1) as u16; // 10Khz
 
@@ -107,7 +106,7 @@ impl time::Time for RvTimer<'_> {
             // Wraparound
             high = self.registers.value_high.get();
         }
-        debug!("Reading clock {:?}", ((high as u64) << 32) | second_low as u64);
+        //debug!("Reading clock {:?}", ((high as u64) << 32) | second_low as u64);
         Ticks64::from(((high as u64) << 32) | second_low as u64)
     }
 }

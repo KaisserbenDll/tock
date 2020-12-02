@@ -65,7 +65,6 @@ pub unsafe fn  load_vpp_processes<C: Chip>(
         &_eappmem as *const u8 as usize - &_sappmem as *const u8 as usize,
     );
 
-
     if config::CONFIG.debug_load_processes {
         debug!(
             "Loading processes from flash={:#010X}-{:#010X} into sram={:#010X}-{:#010X}",
@@ -79,16 +78,17 @@ pub unsafe fn  load_vpp_processes<C: Chip>(
     // use grants which can no longer be used after calling the create() function. Declaring
     // them out of the loop is a better option.
     //There are 4 Mailboxes.
-    let mgt_main_mb = mbox::create_mgt_mb();
-    let com_main_mb = mbox::create_com_mb();
-    let main_mgt_mb = mbox::create_main_mgt_mb();
-    let main_com_mb = mbox::create_main_com_mb();
+    let memory_allocation_cap = create_capability!(MemoryAllocationCapability);
+
+    let mgt_main_mb = mbox::create_mgt_mb(kernel,&memory_allocation_cap);
+    let com_main_mb = mbox::create_com_mb(kernel,&memory_allocation_cap);
+    let main_mgt_mb = mbox::create_main_mgt_mb(kernel,&memory_allocation_cap);
+    let main_com_mb = mbox::create_main_com_mb(kernel,&memory_allocation_cap);
     mbs[0] = Some(mgt_main_mb);
     mbs[1] = Some(com_main_mb);
     mbs[2] = Some(main_mgt_mb);
     mbs[3] = Some(main_com_mb);
     // There are 4 ipc structs
-    let memory_allocation_cap = create_capability!(MemoryAllocationCapability);
     let main_com_ipc = ipc::create_main_com_ipc(kernel,&memory_allocation_cap);
     let com_main_ipc = ipc::create_com_main_ipc(kernel,&memory_allocation_cap);
     let main_mgt_ipc = ipc::create_main_mgt_ipc(kernel,&memory_allocation_cap);

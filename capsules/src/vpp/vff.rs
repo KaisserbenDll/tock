@@ -7,7 +7,6 @@
 
 use crate::vpp::mloi::*;
 use core::cell::Cell;
-// use core::mem;
 
 const MK_FORMAT_VERSION : u8 = 0b0100 ;
 

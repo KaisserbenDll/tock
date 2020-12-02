@@ -10,11 +10,9 @@ use core::borrow::{BorrowMut, Borrow};
 
 #[derive(Default)]
 pub struct ipcData {
-    /// An array of app slices that this application has shared with other
-    /// applications.
+    /// App slice that this application has shared with other applications.
     pub(crate) shared_memory:Option<AppSlice<Shared, u8>>,
     pub (crate) callback: Option<Callback>,
-
 }
 pub struct ipc {
     ipc_id: Cell<MK_IPC_ID_u>,
@@ -45,7 +43,7 @@ impl  ipc{
             ipc_id: Cell::new(MK_IPC_MGT_MAIN_ID),
             m_uLength_IPC: Cell::new(MK_IPC_MGT_LENGTH),
             writer_process_index: Cell::new(0),
-            reader_process_index: Cell::new(2),
+            reader_process_index: Cell::new(1),
             data: kernel.create_grant(capability),
         }
     }
@@ -64,7 +62,7 @@ impl  ipc{
         ipc{
             ipc_id: Cell::new(MK_IPC_MAIN_MGT_ID),
             m_uLength_IPC: Cell::new(MK_IPC_MGT_LENGTH),
-            writer_process_index: Cell::new(2),
+            writer_process_index: Cell::new(1),
             reader_process_index: Cell::new(0),
             data: kernel.create_grant(capability),
         }
@@ -94,12 +92,12 @@ impl  ipc{
     }
 
 
-    pub fn expose_slice_to_app(&self, caller_id: AppId, exposer_id: AppId) -> bool{
-        debug!("Here");
-        self.data.enter(exposer_id,|data,_|{
+    pub fn expose_slice_to_app(&self, reader_id: AppId, writer_id: AppId) -> bool{
+        debug!("Exposer ID {:?},Caller ID {:?}",writer_id.id(),reader_id.id());
+        self.data.enter(writer_id,|data,_|{
                 // expose slices in data2 to data1
                 let slice = data.shared_memory.as_ref().unwrap();
-                unsafe {slice.expose_to(caller_id)};
+                unsafe {slice.expose_to(reader_id)};
                 true
         }).unwrap_or(false)
     }

@@ -58,3 +58,5 @@ tools/qemu-build
 
 # Python scripts
 __pycache__
+
+tools/qemu

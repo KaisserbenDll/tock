@@ -28,6 +28,33 @@ pub struct EarlGrey<A: 'static + Alarm<'static>> {
     scheduler_timer: kernel::VirtualSchedulerTimer<A>,
 }
 
+pub struct EarlGreyDefaultPeripherals<'a> {
+    pub aes: crate::aes::Aes<'a>,
+    pub hmac: lowrisc::hmac::Hmac<'a>,
+    pub usb: lowrisc::usbdev::Usb<'a>,
+    pub uart0: lowrisc::uart::Uart<'a>,
+    //pub gpio_port: crate::gpio::Port<'a>,
+    pub i2c: lowrisc::i2c::I2c<'a>,
+    pub flash_ctrl: lowrisc::flash_ctrl::FlashCtrl<'a>,
+}
+
+impl<'a> EarlGreyDefaultPeripherals<'a> {
+    pub fn new() -> Self {
+        Self {
+            aes: crate::aes::Aes::new(),
+            hmac: lowrisc::hmac::Hmac::new(crate::hmac::HMAC0_BASE),
+            usb: lowrisc::usbdev::Usb::new(crate::usbdev::USB0_BASE),
+            uart0: lowrisc::uart::Uart::new(crate::uart::UART0_BASE, CONFIG.peripheral_freq),
+            //gpio_port: crate::gpio::Port::new(),
+            i2c: lowrisc::i2c::I2c::new(crate::i2c::I2C_BASE, (1 / CONFIG.cpu_freq) * 1000 * 1000),
+            flash_ctrl: lowrisc::flash_ctrl::FlashCtrl::new(
+                crate::flash_ctrl::FLASH_CTRL_BASE,
+                lowrisc::flash_ctrl::FlashRegion::REGION0,
+            ),
+        }
+    }
+}
+
 impl<A: 'static + Alarm<'static>> EarlGrey<A> {
     pub unsafe fn new(alarm: &'static A) -> Self {
         Self {

@@ -1,7 +1,6 @@
 //! Implementation of VPP Process Management dedicated Functions
 //! This module VppProcessManager can be used as a component to control and "inspect"
 //! userspace processes.
-
 #![allow(unused_imports)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
@@ -37,7 +36,21 @@ use crate::vpp::mailbox::mbox;
 use crate::vpp::mloi::MK_SIGNAL_e::MK_SIGNAL_ERROR;
 use crate::vpp::ipc::ipc;
 use crate::driver;
-use kernel::common::Queue;
+use kernel::hil::time::Alarm;
+
+/// Macro used to store $B Bytes in a $N Buffer.
+///  store_vpp_sec!(buff,1024) stores 1kB in buff in the .vpp_app section
+#[macro_export]
+#[macro_use]
+macro_rules! store_vpp_sec {
+    ($N:ident, $B:expr) => {
+        #[link_section = ".vpp_app"]
+        #[used]
+        #[no_mangle]
+        pub static $N: [u8; $B ] = [0x00; $B];
+    };
+}
+
 
 pub const NUM_PROCS: usize = 4 ; // Number of allowed vpp processes.
 pub const DRIVER_NUM: usize = driver::NUM::VppDriver as usize;
@@ -53,7 +66,9 @@ impl  VppKernel {
     pub fn  new(procs: &'static [Option<VppProcess>;NUM_PROCS],
                 mbs: &'static [Option<mbox>;MK_MAILBOX_LIMIT],
                 ipcs: &'static [Option<ipc>; MK_IPC_LIMIT ],
-                tock_kernel: &'static Kernel) -> VppKernel{
+                tock_kernel: &'static Kernel,
+                // timer: &'static dyn Alarm<'static>
+            ) -> VppKernel{
         // Before instantiating the Vpp Kernel with vpp_processes, ipc structs and mailboxes
         // ,let us make sure that the first Process is the MGT Process, the second Process is
         // the COM Process and the 3rd Process is the MAIN Process (which is the
@@ -64,6 +79,7 @@ impl  VppKernel {
             kernel: tock_kernel,
             mailboxes: mbs,
             ipcs:ipcs,
+            // timer:timer,
         }
     }
     // 1) Generic Functions
@@ -94,59 +110,6 @@ impl  VppKernel {
     }
 
     // 2) Process Management
-    /// Helper function to get a reference to a valid process based on the index of the process
-    /// in the group (array) of Processes. The function return `None` if there is no Process with
-    /// such index--.
-    pub (crate) fn get_process_ref_index(&self, index: MK_Index_t) -> Option<&VppProcess> {
-        let mut return_pointer: Option<&VppProcess> = None;
-        for (i, process ) in self.vpp_processes.iter().enumerate(){
-            if i == index as usize {
-                return_pointer = Option::from(process);
-            } else {
-                return_pointer = None;
-            }
-        }
-        return_pointer
-    }
-    /// Helper function to get a reference to a valid process based on a handle. It returns
-    /// `None` if the process is in dead state or if the handle is not found.
-    pub (crate) fn get_process_ref_handle(&self, handle: MK_HANDLE_t) -> Option<&VppProcess> {
-        // Mapping id to handle. For the time being,
-        // we consider the handle as the id but in 32 bits. This will probably be changed later.
-        let id = convert_to_id(handle);
-        let mut return_pointer: Option<&VppProcess>  = None;
-        for process in self.vpp_processes.iter() {
-            match process {
-                Some(proc) => {
-                    if proc.get_vpp_id() == id {
-                        // even if id found, the Process must not be in "DEAD" state
-                        if proc.get_vpp_state() == VppState::DEAD {
-                            proc.error.set(MK_ERROR_e::MK_ERROR_UNKNOWN_ID);
-                            return_pointer =  None;
-                        }
-                        // if the Process in any other state, a pointer to
-                        // that process is delivered with a success flag and
-                        // break of the loop
-                        else {
-                            proc.error.set(MK_ERROR_e::MK_ERROR_NONE);
-                            return_pointer = Some(proc);
-                            break;
-                        }
-                    }
-                    else {
-                        proc.error.set(MK_ERROR_UNKNOWN_ID);
-                        return_pointer = None;
-                    }
-                }
-
-                None => {
-                    return_pointer = None;
-                }
-            }
-        }
-        return_pointer
-        //Missing ACCESS DENIED!!!!!!!!!!!!!!!!!!!!!!!!!
-    }
     /// Get the process kernel Handle for itself or for one of its descendants through its
     /// Process Identifier. The Proces retrieving the Process Handle does not inherit the rights
     /// of its owner. I
@@ -261,28 +224,6 @@ impl  VppKernel {
 
     // 3) Mailbox Management
 
-    /// Helper function to get a reference to a valid Mailbox  based on a handle. It returns
-    /// `None` if the handle is not found.
-    pub fn Get_Mailbox_ref_internal(&self, handle: MK_HANDLE_t) -> Option<&mbox> {
-        let MailboxID = convert_handle_to_mbid(handle);
-        let mut return_pointer: Option<&mbox> = None ;
-            for mailbox in self.mailboxes.iter(){
-                match mailbox {
-                    Some(mb) => { if mb.get_mb_id() == MailboxID {
-                        // self.last_error.set(MK_ERROR_NONE);
-                        return_pointer = Some(mb);
-                        break;
-                    } else {
-                        // self.last_error.set(MK_ERROR_UNKNOWN_ID);
-                        return_pointer = None;
-                    }},
-                    None =>  {
-                        return_pointer = None;
-                    }
-                }
-            }
-        return_pointer
-    }
     /// Get a Mailbox Handle from a Mailbox identifier
     pub fn _mk_Get_Mailbox_Handle(&self,_eMailboxID: MK_MAILBOX_ID_u) -> Option<MK_HANDLE_t>{
         // Missing access control if the Process is not allowed to send a Signal
@@ -366,31 +307,6 @@ impl  VppKernel {
     }
 
     // 4) IPC Management
-
-    /// Helper function to get a reference to a valid IPC  based on a handle. It returns
-    /// `None` if the handle is not found.
-    pub fn Get_IPC_ref_internal(&self, handle: MK_HANDLE_t) -> Option<&ipc> {
-        let IPC_ID = convert_handle_to_ipcID(handle);
-        let mut return_pointer: Option<&ipc> = None ;
-        for ipc in self.ipcs.iter(){
-            match ipc {
-                Some(ipc_struct) => { if ipc_struct.get_ipc_id() == IPC_ID {
-                    // self.last_error.set(MK_ERROR_NONE);
-                    return_pointer = Some(ipc_struct);
-                    break;
-                } else {
-                    // self.last_error.set(MK_ERROR_UNKNOWN_ID);
-                    return_pointer = None;
-                }},
-                None =>  {
-                    // self.last_error.set(MK_ERROR_UNKNOWN_ID);
-                    return_pointer = None;
-                }
-            }
-        }
-        return_pointer
-    }
-
     /// Get the Handle of an IPC for communication between two Processes
     /// The size, ownership and the granted access of the IPC are defined in the IPC
     /// Descriptor. The owner Process (writer) of the IPC has a read-write access.
@@ -430,7 +346,157 @@ impl  VppKernel {
 
     // 5) VRE Management
     // 6) Firmware Management
+    // 7) Misc
+    pub (crate) fn get_process_ref_index(&self, index: MK_Index_t) -> Option<&VppProcess> {
+        let mut return_pointer: Option<&VppProcess> = None;
+        for (i, process ) in self.vpp_processes.iter().enumerate(){
+            if i == index as usize {
+                return_pointer = Option::from(process);
+            } else {
+                return_pointer = None;
+            }
+        }
+        return_pointer
+    }
+    /// Helper function to get a reference to a valid process based on a handle. It returns
+    /// `None` if the process is in dead state or if the handle is not found.
 
+    pub (crate) fn get_process_ref_handle(&self, handle: MK_HANDLE_t) -> Option<&VppProcess> {
+        // Mapping id to handle. For the time being,
+        // we consider the handle as the id but in 32 bits. This will probably be changed later.
+        let id = convert_to_id(handle);
+        let mut return_pointer: Option<&VppProcess>  = None;
+        for process in self.vpp_processes.iter() {
+            match process {
+                Some(proc) => {
+                    if proc.get_vpp_id() == id {
+                        // even if id found, the Process must not be in "DEAD" state
+                        if proc.get_vpp_state() == VppState::DEAD {
+                            proc.error.set(MK_ERROR_e::MK_ERROR_UNKNOWN_ID);
+                            return_pointer =  None;
+                        }
+                        // if the Process in any other state, a pointer to
+                        // that process is delivered with a success flag and
+                        // break of the loop
+                        else {
+                            proc.error.set(MK_ERROR_e::MK_ERROR_NONE);
+                            return_pointer = Some(proc);
+                            break;
+                        }
+                    }
+                    else {
+                        proc.error.set(MK_ERROR_UNKNOWN_ID);
+                        return_pointer = None;
+                    }
+                }
+
+                None => {
+                    return_pointer = None;
+                }
+            }
+        }
+        return_pointer
+        //Missing ACCESS DENIED!!!!!!!!!!!!!!!!!!!!!!!!!
+    }
+    /// Helper function to get a reference to a valid Mailbox  based on a handle. It returns
+    /// `None` if the handle is not found.
+
+    /// Helper function to get a reference to a valid IPC  based on a handle. It returns
+    /// `None` if the handle is not found.
+    pub fn Get_IPC_ref_internal(&self, handle: MK_HANDLE_t) -> Option<&ipc> {
+        let IPC_ID = convert_handle_to_ipcID(handle);
+        let mut return_pointer: Option<&ipc> = None ;
+        for ipc in self.ipcs.iter(){
+            match ipc {
+                Some(ipc_struct) => { if ipc_struct.get_ipc_id() == IPC_ID {
+                    // self.last_error.set(MK_ERROR_NONE);
+                    return_pointer = Some(ipc_struct);
+                    break;
+                } else {
+                    // self.last_error.set(MK_ERROR_UNKNOWN_ID);
+                    return_pointer = None;
+                }},
+                None =>  {
+                    // self.last_error.set(MK_ERROR_UNKNOWN_ID);
+                    return_pointer = None;
+                }
+            }
+        }
+        return_pointer
+    }
+    pub fn Get_IPC_from_reader_appid(&self, reader_appid: AppId) -> Option<&ipc> {
+        let mut return_pointer: Option<&ipc> = None ;
+        for ipc in self.ipcs.iter(){
+            match ipc {
+                Some(ipc_struct) => {
+                    if ipc_struct.get_reader_proc_i() == reader_appid.index().unwrap() as u16 {
+                    return_pointer = Some(ipc_struct);
+                    break;
+                } else {
+                    return_pointer = None;
+                }},
+                None =>  {
+                    return_pointer = None;
+                }
+            }
+        }
+        return_pointer
+
+    }
+    pub fn Get_IPC_from_writer_appid(&self, writer_appid: AppId) -> Option<&ipc> {
+        let mut return_pointer: Option<&ipc> = None ;
+        for ipc in self.ipcs.iter(){
+            match ipc {
+                Some(ipc_struct) => {
+                    if ipc_struct.get_writer_proc_i() == writer_appid.index().unwrap() as u16 {
+                        return_pointer = Some(ipc_struct);
+                        break;
+                    } else {
+                        return_pointer = None;
+                    }},
+                None =>  {
+                    return_pointer = None;
+                }
+            }
+        }
+        return_pointer
+
+    }
+    /// Helper function to get a reference to a valid process based on the index of the process
+    /// in the group (array) of Processes. The function return `None` if there is no Process with
+    /// such index--.
+    pub fn Get_Mailbox_ref_internal(&self, handle: MK_HANDLE_t) -> Option<&mbox> {
+        let MailboxID = convert_handle_to_mbid(handle);
+        let mut return_pointer: Option<&mbox> = None ;
+        for mailbox in self.mailboxes.iter(){
+            match mailbox {
+                Some(mb) => { if mb.get_mb_id() == MailboxID {
+                    // self.last_error.set(MK_ERROR_NONE);
+                    return_pointer = Some(mb);
+                    break;
+                } else {
+                    // self.last_error.set(MK_ERROR_UNKNOWN_ID);
+                    return_pointer = None;
+                }},
+                None =>  {
+                    return_pointer = None;
+                }
+            }
+        }
+        return_pointer
+    }
+    pub fn Convert_Appid_to_Index(&self, appid: AppId) -> MK_Index_t {
+        appid.index().unwrap() as u16
+    }
+    pub fn Convert_Index_to_Appid (&self, index: MK_Index_t) -> Option<AppId> {
+        let appid = self.kernel.lookup_app_by_identifier(index as usize);
+        if appid.is_some(){
+            appid
+        }else {
+            None
+        }
+        //Error handling is missing + assumption that index = identifier
+    }
 }
 
 /// Syscall Driver for VPP ABI/API Kernel functions
@@ -494,24 +560,14 @@ impl Driver  for vpp_kernel_driver {
                     else { ReturnCode::SuccessWithValue {value: 0}}
                 },
             5 => {
-               /* debug!("data {:?}",data);
-                let handle =
+                let mb_handle =
                     self
                         .vpp_kernel
                         ._mk_Get_Mailbox_Handle(data as MK_MAILBOX_ID_u);
-
-                if handle.is_some() {ReturnCode::SuccessWithValue {value: handle.unwrap() as usize} }
-                else { ReturnCode::FAIL}*/
-                let error = self.vpp_kernel.
-                    _mk_Send_Signal( data as MK_HANDLE_t,
-                                     data2 as MK_BITMAP_t
-
-                    ).into();
-
-                ReturnCode::SuccessWithValue {value:error}
+                if mb_handle.is_some() {ReturnCode::SuccessWithValue {value: mb_handle.unwrap() as usize} }
+                else { ReturnCode::SuccessWithValue {value: 0}}
             },
             6 => {
-                // debug!("Sending a Signal");
                 let error = self.vpp_kernel.
                     _mk_Send_Signal( data as MK_HANDLE_t,
                                     data2 as MK_BITMAP_t
@@ -530,15 +586,49 @@ impl Driver  for vpp_kernel_driver {
                 else { ReturnCode::FAIL}
             },
             15 => {
-                debug!("Useless Print");
-                debug!("Shared Buffer {:?}",data as usize);
-
-                ReturnCode::SUCCESS
+                let ipc = self.vpp_kernel.Get_IPC_ref_internal(data as u32);
+                if ipc.is_some(){
+                    let writer_proc_i = ipc.unwrap().get_writer_proc_i();
+                    let writer_appid = self
+                        .vpp_kernel.Convert_Index_to_Appid(writer_proc_i);
+                    if writer_appid.is_some() {
+                        ipc.unwrap().data.enter(writer_appid.unwrap(), |data, _| {
+                            if data.shared_memory.as_ref().is_some() {
+                                let shared_buffer = data.shared_memory.as_ref().unwrap().ptr();
+                                debug!("Shared Buffer {:?}", shared_buffer);
+                                ReturnCode::SuccessWithValue { value: shared_buffer as usize }
+                            } else {
+                                ReturnCode::FAIL
+                            }
+                        }).unwrap_or(ReturnCode::EBUSY)
+                    }else {
+                        ReturnCode::FAIL
+                    }
+                } else {
+                    ReturnCode::FAIL
+                }
             },
-            /*10 => {
-                let shared_address = self.vpp_kernel._mk_Get_Access_IPC(data as u32,appid)?;
-                ReturnCode::SuccessWithValue {value: shared_address as usize }
-            },*/
+            20 => {
+                let ipc = self.vpp_kernel.Get_IPC_ref_internal(data as u32);
+                // Error Handling Missing
+                if ipc.is_some() {
+                    let size = ipc.unwrap().get_ipc_len();
+                    ReturnCode::SuccessWithValue { value: size as usize }
+                } else {
+                    ReturnCode::FAIL
+                }
+            },
+            21 => {
+                let ipc_handle = self.vpp_kernel._mk_Get_IPC_Handle(data as u16);
+                // Error Handling Missing
+                if ipc_handle.is_some() {ReturnCode::SuccessWithValue {value: ipc_handle.unwrap() as usize} }
+                else { ReturnCode::SuccessWithValue {value: 0}}
+            },
+            30 => {
+                store_vpp_sec!(buff,500);
+                ReturnCode::SUCCESS
+
+            },
             100 => {
                 let error = self.vpp_kernel._mk_Get_Error(data as u32);
                 ReturnCode::SuccessWithValue {value: error.into() }
@@ -547,42 +637,49 @@ impl Driver  for vpp_kernel_driver {
             _ => ReturnCode::ENOSUPPORT,
         }
     }
-
     fn allow(
-        &self,
+         &self,
         appid: AppId,
-        ipc_handle: usize,
-        shared_mem: Option<AppSlice<Shared, u8>>,
+        _data: usize,
+        shared_mem: Option<AppSlice<Shared, u8>>
     ) -> ReturnCode {
-        let ipc_wrapped = self.vpp_kernel.Get_IPC_ref_internal(ipc_handle as u32);
-        let ipc = ipc_wrapped.unwrap();
-        let ret = ipc.data.enter(appid, |data,_| {
-            let tmp = shared_mem.as_ref().unwrap().ptr();
-            debug!("Address shared buff {:?}",tmp);
-            data.shared_memory = shared_mem;
-            ReturnCode::SuccessWithValue {value: tmp as usize}
-        }).unwrap_or(ReturnCode::EBUSY);
-        let caller_id = self.vpp_kernel.kernel.lookup_app_by_identifier(0);
-        ipc.expose_slice_to_app(caller_id.unwrap(), appid);
+        let owner_ipc = self.vpp_kernel.Get_IPC_from_writer_appid(appid);
+        if owner_ipc.is_some(){
+            let reader_ipc = owner_ipc.unwrap().get_reader_proc_i();
+            let reader_appid =
+                self.vpp_kernel.
+                    Convert_Index_to_Appid(reader_ipc);
+            owner_ipc.unwrap().data.enter(appid,|data,_|{
+                // Register the shared memory in the Grant region of the writer/owner Process
+                data.shared_memory= shared_mem;
+                // Expose that shared memory the reader_appid from the IPC struct
+                if reader_appid.is_some(){
+                    debug!("Exposing");
+                    unsafe {data.shared_memory.as_ref().unwrap().expose_to(reader_appid.unwrap())};
+                 }
+                ReturnCode::SUCCESS
+            }).unwrap_or(ReturnCode::EBUSY);
+            ReturnCode::SUCCESS
 
-        ret
+        } else {
+            ReturnCode::FAIL
+        }
     }
     fn subscribe(
         &self,
-        ipc_handle: usize,
+        handle: usize,
         callback: Option<Callback>,
         app_id: AppId,
     ) -> ReturnCode {
-        let ipc_wrapped = self.vpp_kernel.Get_IPC_ref_internal(ipc_handle as u32);
-        let ipc = ipc_wrapped.unwrap();
-        let ret = ipc.data.enter(app_id, |data,_| {
+        //TODO: Missing change the state of the process to waiting
+
+        // This is the mailbox that is being sent to. The app_id is however the sender process.
+        let mailbox= self.vpp_kernel.Get_Mailbox_ref_internal(handle as MK_HANDLE_t);
+        let ret = mailbox.unwrap().data.enter(app_id, |data,_| {
             data.callback = callback;
-            data.callback.unwrap().schedule(0,0,0);
             ReturnCode::SuccessWithValue {value: 0x007}
         }).unwrap_or(ReturnCode::EBUSY);
-
-
         ret
-
     }
+
 }

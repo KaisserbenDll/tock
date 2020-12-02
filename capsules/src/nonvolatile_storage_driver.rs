@@ -563,7 +563,7 @@ impl Driver for NonvolatileStorage<'_> {
                     length,
                     Some(appid),
                 )
-            }
+            },
 
             _ => ReturnCode::ENOSUPPORT,
         }

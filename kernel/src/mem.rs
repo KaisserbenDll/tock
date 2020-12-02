@@ -6,7 +6,7 @@ use core::slice;
 
 use crate::callback::AppId;
 use crate::capabilities;
-
+use crate::debug;
 /// Type for specifying an AppSlice is hidden from the kernel.
 #[derive(Debug)]
 pub struct Private;
@@ -92,6 +92,9 @@ impl<L, T> AppSlice<L, T> {
     /// change back to private (crate)
     pub unsafe fn expose_to(&self, appid: AppId) -> bool {
         if appid != self.ptr.process {
+        debug!("Adding MPU region from {:?} with length {:?}",
+               self.ptr() as *const u8,
+                self.len);
             self.ptr
                 .process
                 .kernel

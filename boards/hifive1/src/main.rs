@@ -20,6 +20,13 @@ use kernel::Chip;
 use kernel::Platform;
 use kernel::{create_capability, debug, static_init};
 use rv32i::csr;
+/*
+use capsules::vpp::vppkernel::NUM_PROCS;
+use capsules::vpp::mloi::{MK_MAILBOX_LIMIT, MK_IPC_LIMIT};
+use capsules::vpp::mailbox::mbox;
+use capsules::vpp::ipc::ipc;
+use capsules::vpp::process::VppProcess;
+use capsules::vpp::vppkernel::VppKernel;*/
 
 pub mod io;
 
@@ -27,11 +34,15 @@ pub mod io;
 mod multi_alarm_test;
 
 pub const NUM_PROCS: usize = 4;
-//
 // Actual memory for holding the active process structures. Need an empty list
 // at least.
 static mut PROCESSES: [Option<&'static dyn kernel::procs::ProcessType>; NUM_PROCS] =
-    [None; NUM_PROCS];
+    [None;NUM_PROCS];
+/*
+static mut VPP_PROCESSES: [Option<VppProcess>;NUM_PROCS] = [None;NUM_PROCS];
+static mut MBOX_ARRAY: [Option<mbox>;MK_MAILBOX_LIMIT] = [None;MK_MAILBOX_LIMIT];
+static mut IPC_ARRAY : [Option<ipc>; MK_IPC_LIMIT] = [None;MK_IPC_LIMIT];
+*/
 
 // Reference to the chip for panic dumps.
 static mut CHIP: Option<
@@ -59,6 +70,8 @@ struct HiFive1 {
         'static,
         VirtualMuxAlarm<'static, rv32i::machine_timer::MachineTimer<'static>>,
     >,
+    //vpp_driver: &'static capsules::vpp::vppkernel::vpp_kernel_driver,
+
 }
 
 /// Mapping of integer syscalls to objects that implement syscalls.
@@ -72,6 +85,8 @@ impl Platform for HiFive1 {
             capsules::console::DRIVER_NUM => f(Some(self.console)),
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
             capsules::low_level_debug::DRIVER_NUM => f(Some(self.lldb)),
+            //capsules::vpp::vppkernel::DRIVER_NUM => f(Some(self.vpp_driver)),
+
             _ => f(None),
         }
     }
@@ -198,7 +213,15 @@ pub unsafe fn reset_handler() {
     components::debug_writer::DebugWriterComponent::new(uart_mux).finalize(());
 
     let lldb = components::lldb::LowLevelDebugComponent::new(board_kernel, uart_mux).finalize(());
-
+    // VPP init
+    /*let vpp_kernel = static_init!(VppKernel,
+    VppKernel::new(&VPP_PROCESSES,&MBOX_ARRAY,&IPC_ARRAY,board_kernel));
+    let vpp_driver = static_init!(capsules::vpp::vppkernel::vpp_kernel_driver,
+    capsules::vpp::vppkernel::vpp_kernel_driver::new(vpp_kernel));*/
+   /* let vpp_process_console = capsules::vpp::ProcessManagerConsoleCap
+    ::ProcessConsoleComponent::new(vpp_kernel,uart_mux)
+        .finalize(());
+    vpp_process_console.start();*/
     // Need two debug!() calls to actually test with QEMU. QEMU seems to have
     // a much larger UART TX buffer (or it transmits faster).
     debug!("HiFive1 initialization complete.");
@@ -221,8 +244,22 @@ pub unsafe fn reset_handler() {
         alarm: alarm,
         lldb: lldb,
         led,
+        //vpp_driver
     };
-
+   /* capsules::vpp::process::load_vpp_processes(
+        board_kernel,
+        chip,
+        &mut PROCESSES,
+        &mut VPP_PROCESSES,
+        &mut MBOX_ARRAY,
+        &mut IPC_ARRAY,
+        FAULT_RESPONSE,
+        &process_mgmt_cap)
+        .unwrap_or_else(|err| {
+            debug!("Error loading processes!");
+            debug!("{:?}", err);
+        });
+*/
     kernel::procs::load_processes(
         board_kernel,
         chip,

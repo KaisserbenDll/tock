@@ -1057,7 +1057,7 @@ impl<C: Chip> ProcessType for Process<'_, C> {
         if stack_pointer >= self.mem_start() && stack_pointer < self.mem_end() {
             self.debug.map(|debug| {
                 debug.app_stack_start_pointer = Some(stack_pointer);
-                debug!("stack_pointer {:?}", stack_pointer);
+                // debug!("stack_pointer {:?}", stack_pointer);
                 // We also reset the minimum stack pointer because whatever value
                 // we had could be entirely wrong by now.
                 debug.min_stack_pointer = stack_pointer;
@@ -1069,7 +1069,7 @@ impl<C: Chip> ProcessType for Process<'_, C> {
         if heap_pointer >= self.mem_start() && heap_pointer < self.mem_end() {
             self.debug.map(|debug| {
                 debug.app_heap_start_pointer = Some(heap_pointer);
-                debug!("heap_pointer {:?}", heap_pointer);
+                // debug!("heap_pointer {:?}", heap_pointer);
 
             });
         }
@@ -1119,7 +1119,7 @@ impl<C: Chip> ProcessType for Process<'_, C> {
         }
 
         let new_break = unsafe { self.app_break.get().offset(increment) };
-        debug!("new_sbreak {:?}", new_break);
+        // debug!("new_sbreak {:?}", new_break);
 
         self.brk(new_break)
     }
@@ -1129,7 +1129,9 @@ impl<C: Chip> ProcessType for Process<'_, C> {
         if !self.is_active() {
             return Err(Error::InactiveApp);
         }
-
+        // debug!("new break {:?}, allow_high water mark {:?}",new_break,self.allow_high_water_mark.get());
+        //  debug!("new break {:?}, memory end  {:?}", new_break, self.mem_end());
+        //  debug!("kernel_memory_berak {:?}", self.kernel_memory_break.get());
         self.mpu_config
             .map_or(Err(Error::KernelError), |mut config| {
                 if new_break < self.allow_high_water_mark.get() || new_break >= self.mem_end() {
@@ -1147,7 +1149,7 @@ impl<C: Chip> ProcessType for Process<'_, C> {
                     let old_break = self.app_break.get();
                     self.app_break.set(new_break);
                     self.chip.mpu().configure_mpu(&config, &self.appid());
-                    debug!("new_brk {:?}", new_break);
+                    // debug!("old_break {:?}, new_brk {:?}", old_break,new_break);
 
                     Ok(old_break)
                 }
@@ -1275,7 +1277,7 @@ impl<C: Chip> ProcessType for Process<'_, C> {
         let grant_pointer_array = self.mem_end() as *mut *mut u8;
         let grant_pointer_pointer = grant_pointer_array.offset(-(grant_num + 1));
         *grant_pointer_pointer = grant_ptr;
-        debug!("grant_pointer {:?}", grant_pointer_pointer);
+        // debug!("grant_pointer {:?}", grant_pointer_pointer);
 
     }
 
@@ -1627,7 +1629,7 @@ impl<C: 'static + Chip> Process<'_, C> {
         let header_flash = app_flash
             .get(0..header_length as usize)
             .ok_or(ProcessLoadError::NotEnoughFlash)?;
-        debug!("app_flash {:?}", app_flash.as_ptr());
+        // debug!("app_flash {:?}", app_flash.as_ptr());
         // Parse the full TBF header to see if this is a valid app. If the
         // header can't parse, we will error right here.
         let tbf_header = tbfheader::parse_tbf_header(header_flash, app_version)?;
@@ -1687,7 +1689,7 @@ impl<C: 'static + Chip> Process<'_, C> {
 
         // Initialize MPU region configuration.
         let mut mpu_config: <<C as Chip>::MPU as MPU>::MpuConfig = Default::default();
-       /* extern "C" {
+        /*extern "C" {
             static _svppapp: u8;
             static _evppapp: u8;
         }
@@ -1695,7 +1697,7 @@ impl<C: 'static + Chip> Process<'_, C> {
             &_svppapp as *const u8,
             &_evppapp as *const u8 as usize - &_svppapp as *const u8 as usize);
         debug!(
-            "[!] VPP flash={:#010X} until  :{:#010X}",
+            " VPP flash={:#010X} until  :{:#010X}",
             vpp_app.as_ptr() as usize ,
             vpp_app.as_ptr() as usize  + vpp_app.len() ,
         );
@@ -1767,7 +1769,7 @@ impl<C: 'static + Chip> Process<'_, C> {
         let initial_kernel_memory_size =
             grant_ptrs_offset + callbacks_offset + process_struct_offset;
         let initial_app_memory_size = 3 * 1024;
-        debug!("mem {:#X}", initial_kernel_memory_size + initial_app_memory_size);
+        // debug!("mem {:#X}", initial_kernel_memory_size + initial_app_memory_size);
         if min_app_ram_size < initial_app_memory_size {
             min_app_ram_size = initial_app_memory_size;
         }
@@ -1822,7 +1824,7 @@ impl<C: 'static + Chip> Process<'_, C> {
             remaining_memory
         };
         // debug!("remaining_memory  {:?}", remaining_memory.as_ptr());
-         debug!("remaining_memory length {:#010X}", remaining_memory.len());
+        //  debug!("remaining_memory length {:#010X}", remaining_memory.len());
 
         // Determine where process memory will go and allocate MPU region for
         // app-owned memory.
@@ -1860,7 +1862,7 @@ impl<C: 'static + Chip> Process<'_, C> {
         let memory_start_offset = app_memory_start as usize - remaining_memory.as_ptr() as usize;
         // First split the remaining memory into a slice that contains the
         // process memory and a slice that will not be used by this process.
-        debug!("memory_start_offset  {:?}", memory_start_offset);
+        // debug!("memory_start_offset  {:?}", memory_start_offset);
 
         let (app_memory_oversize, unused_memory) =
             remaining_memory.split_at_mut(memory_start_offset + app_memory_size);
@@ -2041,7 +2043,7 @@ impl<C: 'static + Chip> Process<'_, C> {
                 process
                     .current_stack_pointer
                     .set(new_stack_pointer as *mut u8);
-                debug!("new_stack_pointer {:?}", new_stack_pointer);
+                // debug!("new_stack_pointer {:?}", new_stack_pointer);
                 process.debug_set_max_stack_depth();
             }
             _ => {
