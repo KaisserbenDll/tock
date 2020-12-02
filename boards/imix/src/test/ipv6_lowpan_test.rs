@@ -136,16 +136,8 @@ pub unsafe fn initialize_all(
     mux_mac.add_user(radio_mac);
     let default_rx_state = static_init!(RxState<'static>, RxState::new(&mut RX_STATE_BUF));
 
-    let sixlo_alarm = static_init!(
-        VirtualMuxAlarm<sam4l::ast::Ast>,
-        VirtualMuxAlarm::new(mux_alarm)
-    );
     let sixlowpan = static_init!(
-        Sixlowpan<
-            'static,
-            VirtualMuxAlarm<sam4l::ast::Ast<'static>>,
-            sixlowpan_compression::Context,
-        >,
+        Sixlowpan<'static, sam4l::ast::Ast<'static>, sixlowpan_compression::Context>,
         Sixlowpan::new(
             sixlowpan_compression::Context {
                 prefix: DEFAULT_CTX_PREFIX,
@@ -153,7 +145,7 @@ pub unsafe fn initialize_all(
                 id: 0,
                 compress: false,
             },
-            sixlo_alarm
+            &sam4l::ast::AST
         )
     );
 

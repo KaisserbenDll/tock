@@ -3,6 +3,8 @@
 use kernel::common::registers::{register_bitfields, register_structs, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 
+pub static mut PWRCTRL: PwrCtrl = PwrCtrl::new(PWRCTRL_BASE);
+
 const PWRCTRL_BASE: StaticRef<PwrCtrlRegisters> =
     unsafe { StaticRef::new(0x4002_1000 as *const PwrCtrlRegisters) };
 
@@ -70,10 +72,8 @@ pub struct PwrCtrl {
 }
 
 impl PwrCtrl {
-    pub const fn new() -> PwrCtrl {
-        PwrCtrl {
-            registers: PWRCTRL_BASE,
-        }
+    pub const fn new(base: StaticRef<PwrCtrlRegisters>) -> PwrCtrl {
+        PwrCtrl { registers: base }
     }
 
     pub fn enable_uart0(&self) {

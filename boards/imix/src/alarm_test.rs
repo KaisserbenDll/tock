@@ -16,21 +16,19 @@ use capsules::test::alarm_edge_cases::TestAlarmEdgeCases;
 use kernel::debug;
 use kernel::hil::time::Alarm;
 use kernel::static_init;
-use sam4l::ast::Ast;
+use sam4l::ast::{Ast, AST};
 
-pub unsafe fn run_alarm(ast: &'static Ast) {
+pub unsafe fn run_alarm() {
     debug!("Starting alarm test.");
-    let test = static_init_alarm_test(ast);
+    let test = static_init_alarm_test();
     test.run();
 }
 
-unsafe fn static_init_alarm_test(
-    ast: &'static Ast,
-) -> &'static TestAlarmEdgeCases<'static, Ast<'static>> {
+unsafe fn static_init_alarm_test() -> &'static TestAlarmEdgeCases<'static, Ast<'static>> {
     let test = static_init!(
         TestAlarmEdgeCases<'static, Ast<'static>>,
-        TestAlarmEdgeCases::new(ast)
+        TestAlarmEdgeCases::new(&AST)
     );
-    ast.set_alarm_client(test);
+    AST.set_alarm_client(test);
     test
 }

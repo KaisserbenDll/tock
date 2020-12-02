@@ -153,6 +153,8 @@ pub struct Ppi {
     registers: StaticRef<PpiRegisters>,
 }
 
+pub static mut PPI: Ppi = Ppi::new();
+
 impl Ppi {
     pub const fn new() -> Ppi {
         Ppi {

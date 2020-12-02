@@ -15,13 +15,15 @@
 //!        src_mac_from_serial_num,
 //!        local_ip_ifaces,
 //!        mux_alarm,
-//!        MAX_PAYLOAD_LEN,
+//!        PAYLOAD_LEN,
 //!    )
 //!    .finalize();
 //! ```
 
 // Author: Hudson Ayers <hayers@stanford.edu>
 // Last Modified: 5/21/2019
+
+#![allow(dead_code)] // Components are intended to be conditionally included
 
 use capsules;
 use capsules::ieee802154::device::MacDevice;
@@ -38,30 +40,31 @@ use capsules::net::udp::udp_port_table::{SocketBindingEntry, UdpPortManager, MAX
 use capsules::net::udp::udp_recv::MuxUdpReceiver;
 use capsules::net::udp::udp_send::MuxUdpSender;
 use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
-use core::mem::MaybeUninit;
 use kernel;
 use kernel::capabilities;
 use kernel::component::Component;
 use kernel::create_capability;
 use kernel::hil::radio;
 use kernel::hil::time::Alarm;
-use kernel::{static_init, static_init_half};
+use kernel::static_init;
 
-// The UDP stack requires several packet buffers:
+use sam4l;
+
+// The UDP stack requires exactly one of several packet buffers:
 //
-//   1. RADIO_BUF: buffer the IP6_Sender uses to pass frames to the radio after fragmentation
+//   1. RF233_BUF: buffer the IP6_Sender uses to pass frames to the radio after fragmentation
 //   2. SIXLOWPAN_RX_BUF: Buffer to hold full IP packets after they are decompressed by 6LoWPAN
-//   3. UDP_DGRAM: The payload of the IP6_Packet, which holds full IP Packets before they are tx'd.
+//   3. udp_dgram: The payload of the IP6_Packet, which holds full IP Packets before they are tx'd.
 //
 //   Additionally, every capsule using the stack needs an additional buffer to craft packets for
 //   tx which can then be passed to the MuxUdpSender for tx.
 
-static mut RADIO_BUF: [u8; radio::MAX_BUF_SIZE] = [0x00; radio::MAX_BUF_SIZE];
+static mut RF233_BUF: [u8; radio::MAX_BUF_SIZE] = [0x00; radio::MAX_BUF_SIZE];
 static mut SIXLOWPAN_RX_BUF: [u8; 1280] = [0x00; 1280];
 
-pub const MAX_PAYLOAD_LEN: usize = 200; //The max size UDP message that can be sent by userspace apps or capsules
+pub const PAYLOAD_LEN: usize = 200; //The max size UDP message that can be sent by userspace apps or capsules
 const UDP_HDR_SIZE: usize = 8;
-static mut UDP_DGRAM: [u8; MAX_PAYLOAD_LEN - UDP_HDR_SIZE] = [0; MAX_PAYLOAD_LEN - UDP_HDR_SIZE];
+static mut UDP_DGRAM: [u8; PAYLOAD_LEN - UDP_HDR_SIZE] = [0; PAYLOAD_LEN - UDP_HDR_SIZE];
 
 // Rather than require a data structure with 65535 slots (number of UDP ports), we
 // use a structure that can hold up to 16 port bindings. Any given capsule can bind
@@ -75,55 +78,17 @@ static mut UDP_DGRAM: [u8; MAX_PAYLOAD_LEN - UDP_HDR_SIZE] = [0; MAX_PAYLOAD_LEN
 static mut USED_KERNEL_PORTS: [Option<SocketBindingEntry>; MAX_NUM_BOUND_PORTS] =
     [None; MAX_NUM_BOUND_PORTS];
 
-// Setup static space for the objects.
-#[macro_export]
-macro_rules! udp_mux_component_helper {
-    ($A:ty) => {{
-        use capsules;
-        use capsules::net::sixlowpan::{sixlowpan_compression, sixlowpan_state};
-        use capsules::net::udp::udp_send::MuxUdpSender;
-        use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
-        use core::mem::MaybeUninit;
-        static mut BUF0: MaybeUninit<VirtualMuxAlarm<'static, $A>> = MaybeUninit::uninit();
-        static mut BUF1: MaybeUninit<capsules::ieee802154::virtual_mac::MacUser<'static>> =
-            MaybeUninit::uninit();
-        static mut BUF2: MaybeUninit<
-            sixlowpan_state::Sixlowpan<
-                'static,
-                VirtualMuxAlarm<'static, $A>,
-                sixlowpan_compression::Context,
-            >,
-        > = MaybeUninit::uninit();
-        static mut BUF3: MaybeUninit<sixlowpan_state::RxState<'static>> = MaybeUninit::uninit();
-        static mut BUF4: MaybeUninit<
-            capsules::net::ipv6::ipv6_send::IP6SendStruct<'static, VirtualMuxAlarm<'static, $A>>,
-        > = MaybeUninit::uninit();
-        static mut BUF5: MaybeUninit<
-            MuxUdpSender<
-                'static,
-                capsules::net::ipv6::ipv6_send::IP6SendStruct<
-                    'static,
-                    VirtualMuxAlarm<'static, $A>,
-                >,
-            >,
-        > = MaybeUninit::uninit();
-        (
-            &mut BUF0, &mut BUF1, &mut BUF2, &mut BUF3, &mut BUF4, &mut BUF5,
-        )
-    };};
-}
-
-pub struct UDPMuxComponent<A: Alarm<'static> + 'static> {
+pub struct UDPMuxComponent {
     mux_mac: &'static capsules::ieee802154::virtual_mac::MuxMac<'static>,
     ctx_pfix_len: u8,
     ctx_pfix: [u8; 16],
     dst_mac_addr: MacAddress,
     src_mac_addr: MacAddress,
     interface_list: &'static [IPAddr],
-    alarm_mux: &'static MuxAlarm<'static, A>,
+    alarm_mux: &'static MuxAlarm<'static, sam4l::ast::Ast<'static>>,
 }
 
-impl<A: Alarm<'static> + 'static> UDPMuxComponent<A> {
+impl UDPMuxComponent {
     pub fn new(
         mux_mac: &'static capsules::ieee802154::virtual_mac::MuxMac<'static>,
         ctx_pfix_len: u8,
@@ -131,57 +96,38 @@ impl<A: Alarm<'static> + 'static> UDPMuxComponent<A> {
         dst_mac_addr: MacAddress,
         src_mac_addr: MacAddress,
         interface_list: &'static [IPAddr],
-        alarm_mux: &'static MuxAlarm<'static, A>,
-    ) -> Self {
-        Self {
-            mux_mac,
-            ctx_pfix_len,
-            ctx_pfix,
-            dst_mac_addr,
-            src_mac_addr,
-            interface_list,
-            alarm_mux,
+        alarm: &'static MuxAlarm<'static, sam4l::ast::Ast<'static>>,
+    ) -> UDPMuxComponent {
+        UDPMuxComponent {
+            mux_mac: mux_mac,
+            ctx_pfix_len: ctx_pfix_len,
+            ctx_pfix: ctx_pfix,
+            dst_mac_addr: dst_mac_addr,
+            src_mac_addr: src_mac_addr,
+            interface_list: interface_list,
+            alarm_mux: alarm,
         }
     }
 }
 
-impl<A: Alarm<'static> + 'static> Component for UDPMuxComponent<A> {
-    type StaticInput = (
-        &'static mut MaybeUninit<VirtualMuxAlarm<'static, A>>,
-        &'static mut MaybeUninit<capsules::ieee802154::virtual_mac::MacUser<'static>>,
-        &'static mut MaybeUninit<
-            sixlowpan_state::Sixlowpan<
-                'static,
-                VirtualMuxAlarm<'static, A>,
-                sixlowpan_compression::Context,
-            >,
-        >,
-        &'static mut MaybeUninit<sixlowpan_state::RxState<'static>>,
-        &'static mut MaybeUninit<
-            capsules::net::ipv6::ipv6_send::IP6SendStruct<'static, VirtualMuxAlarm<'static, A>>,
-        >,
-        &'static mut MaybeUninit<
-            MuxUdpSender<
-                'static,
-                capsules::net::ipv6::ipv6_send::IP6SendStruct<'static, VirtualMuxAlarm<'static, A>>,
-            >,
-        >,
-    );
+impl Component for UDPMuxComponent {
+    type StaticInput = ();
     type Output = (
-        &'static MuxUdpSender<'static, IP6SendStruct<'static, VirtualMuxAlarm<'static, A>>>,
+        &'static MuxUdpSender<
+            'static,
+            IP6SendStruct<'static, VirtualMuxAlarm<'static, sam4l::ast::Ast<'static>>>,
+        >,
         &'static MuxUdpReceiver<'static>,
         &'static UdpPortManager,
     );
 
-    unsafe fn finalize(self, static_buffer: Self::StaticInput) -> Self::Output {
-        let ipsender_virtual_alarm = static_init_half!(
-            static_buffer.0,
-            VirtualMuxAlarm<'static, A>,
+    unsafe fn finalize(self, _s: Self::StaticInput) -> Self::Output {
+        let ipsender_virtual_alarm = static_init!(
+            VirtualMuxAlarm<'static, sam4l::ast::Ast>,
             VirtualMuxAlarm::new(self.alarm_mux)
         );
 
-        let udp_mac = static_init_half!(
-            static_buffer.1,
+        let udp_mac = static_init!(
             capsules::ieee802154::virtual_mac::MacUser<'static>,
             capsules::ieee802154::virtual_mac::MacUser::new(self.mux_mac)
         );
@@ -196,11 +142,10 @@ impl<A: Alarm<'static> + 'static> Component for UDPMuxComponent<A> {
             IpVisibilityCapability::new(&create_cap)
         );
 
-        let sixlowpan = static_init_half!(
-            static_buffer.2,
+        let sixlowpan = static_init!(
             sixlowpan_state::Sixlowpan<
                 'static,
-                VirtualMuxAlarm<'static, A>,
+                sam4l::ast::Ast<'static>,
                 sixlowpan_compression::Context,
             >,
             sixlowpan_state::Sixlowpan::new(
@@ -210,14 +155,13 @@ impl<A: Alarm<'static> + 'static> Component for UDPMuxComponent<A> {
                     id: 0,
                     compress: false,
                 },
-                ipsender_virtual_alarm, // OK to reuse bc only used to get time, not set alarms
+                &sam4l::ast::AST
             )
         );
 
         let sixlowpan_state = sixlowpan as &dyn sixlowpan_state::SixlowpanState;
         let sixlowpan_tx = sixlowpan_state::TxState::new(sixlowpan_state);
-        let default_rx_state = static_init_half!(
-            static_buffer.3,
+        let default_rx_state = static_init!(
             sixlowpan_state::RxState<'static>,
             sixlowpan_state::RxState::new(&mut SIXLOWPAN_RX_BUF)
         );
@@ -237,13 +181,15 @@ impl<A: Alarm<'static> + 'static> Component for UDPMuxComponent<A> {
         // of all packets being routed via a single gateway router, but doesn't work
         // if multiple senders want to send to different addresses on a local network.
         // This will be fixed once we have an ipv6_nd cache mapping IP addresses to dst macs
-        let ip_send = static_init_half!(
-            static_buffer.4,
-            capsules::net::ipv6::ipv6_send::IP6SendStruct<'static, VirtualMuxAlarm<'static, A>>,
+        let ip_send = static_init!(
+            capsules::net::ipv6::ipv6_send::IP6SendStruct<
+                'static,
+                VirtualMuxAlarm<'static, sam4l::ast::Ast>,
+            >,
             capsules::net::ipv6::ipv6_send::IP6SendStruct::new(
                 ip6_dg,
                 ipsender_virtual_alarm,
-                &mut RADIO_BUF,
+                &mut RF233_BUF,
                 sixlowpan_tx,
                 udp_mac,
                 self.dst_mac_addr,
@@ -268,11 +214,13 @@ impl<A: Alarm<'static> + 'static> Component for UDPMuxComponent<A> {
         let udp_recv_mux = static_init!(MuxUdpReceiver<'static>, MuxUdpReceiver::new());
         ip_receive.set_client(udp_recv_mux);
 
-        let udp_send_mux = static_init_half!(
-            static_buffer.5,
+        let udp_send_mux = static_init!(
             MuxUdpSender<
                 'static,
-                capsules::net::ipv6::ipv6_send::IP6SendStruct<'static, VirtualMuxAlarm<'static, A>>,
+                capsules::net::ipv6::ipv6_send::IP6SendStruct<
+                    'static,
+                    VirtualMuxAlarm<'static, sam4l::ast::Ast<'static>>,
+                >,
             >,
             MuxUdpSender::new(ip_send)
         );

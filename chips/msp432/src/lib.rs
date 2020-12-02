@@ -7,7 +7,6 @@ use cortexm4::{
     generic_isr, hard_fault_handler, svc_handler, systick_handler, unhandled_interrupt,
 };
 
-pub mod adc;
 pub mod chip;
 pub mod cs;
 pub mod dma;
@@ -15,7 +14,6 @@ pub mod flctl;
 pub mod gpio;
 pub mod nvic;
 pub mod pcm;
-pub mod ref_module;
 pub mod sysctl;
 pub mod timer;
 pub mod uart;

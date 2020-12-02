@@ -11,7 +11,6 @@
 #![feature(const_in_array_repeat_expressions)]
 
 use capsules::virtual_alarm::{MuxAlarm, VirtualMuxAlarm};
-use e310x::chip::E310xDefaultPeripherals;
 use kernel::capabilities;
 use kernel::common::dynamic_deferred_call::{DynamicDeferredCall, DynamicDeferredCallClientState};
 use kernel::component::Component;
@@ -36,10 +35,7 @@ static mut PROCESSES: [Option<&'static dyn kernel::procs::ProcessType>; NUM_PROC
 
 // Reference to the chip for panic dumps.
 static mut CHIP: Option<
-    &'static e310x::chip::E310x<
-        VirtualMuxAlarm<'static, rv32i::machine_timer::MachineTimer>,
-        E310xDefaultPeripherals,
-    >,
+    &'static e310x::chip::E310x<VirtualMuxAlarm<'static, rv32i::machine_timer::MachineTimer>>,
 > = None;
 
 // How should the kernel respond when a process faults.
@@ -92,21 +88,17 @@ pub unsafe fn reset_handler() {
     // only machine mode
     rv32i::configure_trap_handler(rv32i::PermissionMode::Machine);
 
-    let peripherals = static_init!(E310xDefaultPeripherals, E310xDefaultPeripherals::new());
-
     // initialize capabilities
     let process_mgmt_cap = create_capability!(capabilities::ProcessManagementCapability);
     let memory_allocation_cap = create_capability!(capabilities::MemoryAllocationCapability);
 
-    peripherals.watchdog.disable();
-    peripherals.rtc.disable();
-    peripherals.pwm0.disable();
-    peripherals.pwm1.disable();
-    peripherals.pwm2.disable();
+    e310x::watchdog::WATCHDOG.disable();
+    e310x::rtc::RTC.disable();
+    e310x::pwm::PWM0.disable();
+    e310x::pwm::PWM1.disable();
+    e310x::pwm::PWM2.disable();
 
-    peripherals
-        .prci
-        .set_clock_frequency(sifive::prci::ClockFrequency::Freq16Mhz);
+    e310x::prci::PRCI.set_clock_frequency(sifive::prci::ClockFrequency::Freq16Mhz);
 
     let main_loop_cap = create_capability!(capabilities::MainLoopCapability);
 
@@ -122,14 +114,14 @@ pub unsafe fn reset_handler() {
 
     // Configure kernel debug gpios as early as possible
     kernel::debug::assign_gpios(
-        Some(&peripherals.gpio_port[22]), // Red
+        Some(&e310x::gpio::PORT[22]), // Red
         None,
         None,
     );
 
     // Create a shared UART channel for the console and for kernel debug.
     let uart_mux = components::console::UartMuxComponent::new(
-        &peripherals.uart0,
+        &e310x::uart::UART0,
         115200,
         dynamic_deferred_caller,
     )
@@ -139,36 +131,29 @@ pub unsafe fn reset_handler() {
     let led = components::led::LedsComponent::new(components::led_component_helper!(
         sifive::gpio::GpioPin,
         (
-            &peripherals.gpio_port[22], // Red
+            &e310x::gpio::PORT[22], // Red
             kernel::hil::gpio::ActivationMode::ActiveLow
         ),
         (
-            &peripherals.gpio_port[19], // Green
+            &e310x::gpio::PORT[19], // Green
             kernel::hil::gpio::ActivationMode::ActiveLow
         ),
         (
-            &peripherals.gpio_port[21], // Blue
+            &e310x::gpio::PORT[21], // Blue
             kernel::hil::gpio::ActivationMode::ActiveLow
         )
     ))
     .finalize(components::led_component_buf!(sifive::gpio::GpioPin));
 
-    peripherals
-        .uart0
-        .initialize_gpio_pins(&peripherals.gpio_port[17], &peripherals.gpio_port[16]);
-
-    let hardware_timer = static_init!(
-        rv32i::machine_timer::MachineTimer,
-        rv32i::machine_timer::MachineTimer::new(e310x::timer::MTIME_BASE)
-    );
+    e310x::uart::UART0.initialize_gpio_pins(&e310x::gpio::PORT[17], &e310x::gpio::PORT[16]);
 
     // Create a shared virtualization mux layer on top of a single hardware
     // alarm.
     let mux_alarm = static_init!(
         MuxAlarm<'static, rv32i::machine_timer::MachineTimer>,
-        MuxAlarm::new(hardware_timer)
+        MuxAlarm::new(&e310x::timer::MACHINETIMER)
     );
-    hil::time::Alarm::set_alarm_client(hardware_timer, mux_alarm);
+    hil::time::Alarm::set_alarm_client(&e310x::timer::MACHINETIMER, mux_alarm);
 
     // Alarm
     let virtual_alarm_user = static_init!(
@@ -192,11 +177,8 @@ pub unsafe fn reset_handler() {
     hil::time::Alarm::set_alarm_client(virtual_alarm_user, alarm);
 
     let chip = static_init!(
-        e310x::chip::E310x<
-            VirtualMuxAlarm<'static, rv32i::machine_timer::MachineTimer>,
-            E310xDefaultPeripherals,
-        >,
-        e310x::chip::E310x::new(systick_virtual_alarm, peripherals, hardware_timer)
+        e310x::chip::E310x<VirtualMuxAlarm<'static, rv32i::machine_timer::MachineTimer>>,
+        e310x::chip::E310x::new(systick_virtual_alarm)
     );
     systick_virtual_alarm.set_alarm_client(chip.scheduler_timer());
     CHIP = Some(chip);

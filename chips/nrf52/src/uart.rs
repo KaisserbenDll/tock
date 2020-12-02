@@ -176,9 +176,12 @@ pub struct UARTParams {
     pub baud_rate: u32,
 }
 
+/// UARTE0 handle
+// This should only be accessed by the reset_handler on startup
+pub static mut UARTE0: Uarte = Uarte::new();
+
 impl<'a> Uarte<'a> {
     /// Constructor
-    // This should only be constructed once
     pub const fn new() -> Uarte<'a> {
         Uarte {
             registers: UARTE_BASE,
@@ -285,7 +288,7 @@ impl<'a> Uarte<'a> {
 
     /// UART interrupt handler that listens for both tx_end and rx_end events
     #[inline(never)]
-    pub fn handle_interrupt(&self) {
+    pub fn handle_interrupt(&mut self) {
         if self.tx_ready() {
             self.disable_tx_interrupts();
             self.registers.event_endtx.write(Event::READY::CLEAR);

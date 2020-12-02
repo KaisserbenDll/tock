@@ -919,20 +919,6 @@ impl Rcc {
         self.registers.ahb1enr.modify(AHB1ENR::GPIOAEN::CLEAR)
     }
 
-    // FMC
-
-    fn is_enabled_fmc_clock(&self) -> bool {
-        self.registers.ahb3enr.is_set(AHB3ENR::FMCEN)
-    }
-
-    fn enable_fmc_clock(&self) {
-        self.registers.ahb3enr.modify(AHB3ENR::FMCEN::SET)
-    }
-
-    fn disable_fmc_clock(&self) {
-        self.registers.ahb3enr.modify(AHB3ENR::FMCEN::CLEAR)
-    }
-
     // USART2 clock
 
     fn is_enabled_usart2_clock(&self) -> bool {
@@ -989,9 +975,9 @@ pub enum CPUClock {
 /// Not yet implemented clocks:
 ///
 /// AHB2(HCLK2)
+/// AHB3(HCLK3)
 pub enum PeripheralClock {
     AHB1(HCLK1),
-    AHB3(HCLK3),
     APB1(PCLK1),
     APB2(PCLK2),
 }
@@ -1007,11 +993,6 @@ pub enum HCLK1 {
     GPIOC,
     GPIOB,
     GPIOA,
-}
-
-/// Peripherals clocked by HCLK3
-pub enum HCLK3 {
-    FMC,
 }
 
 /// Peripherals clocked by PCLK1
@@ -1042,9 +1023,6 @@ impl ClockInterface for PeripheralClock {
                 HCLK1::GPIOC => unsafe { RCC.is_enabled_gpioc_clock() },
                 HCLK1::GPIOB => unsafe { RCC.is_enabled_gpiob_clock() },
                 HCLK1::GPIOA => unsafe { RCC.is_enabled_gpioa_clock() },
-            },
-            &PeripheralClock::AHB3(ref v) => match v {
-                HCLK3::FMC => unsafe { RCC.is_enabled_fmc_clock() },
             },
             &PeripheralClock::APB1(ref v) => match v {
                 PCLK1::TIM2 => unsafe { RCC.is_enabled_tim2_clock() },
@@ -1090,9 +1068,6 @@ impl ClockInterface for PeripheralClock {
                 HCLK1::GPIOA => unsafe {
                     RCC.enable_gpioa_clock();
                 },
-            },
-            &PeripheralClock::AHB3(ref v) => match v {
-                HCLK3::FMC => unsafe { RCC.enable_fmc_clock() },
             },
             &PeripheralClock::APB1(ref v) => match v {
                 PCLK1::TIM2 => unsafe {
@@ -1152,9 +1127,6 @@ impl ClockInterface for PeripheralClock {
                 HCLK1::GPIOA => unsafe {
                     RCC.disable_gpioa_clock();
                 },
-            },
-            &PeripheralClock::AHB3(ref v) => match v {
-                HCLK3::FMC => unsafe { RCC.disable_fmc_clock() },
             },
             &PeripheralClock::APB1(ref v) => match v {
                 PCLK1::TIM2 => unsafe {

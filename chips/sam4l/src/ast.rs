@@ -170,14 +170,10 @@ pub struct Ast<'a> {
     callback: OptionalCell<&'a dyn time::AlarmClient>,
 }
 
-impl<'a> Ast<'a> {
-    pub const fn new() -> Self {
-        Self {
-            registers: AST_ADDRESS,
-            callback: OptionalCell::empty(),
-        }
-    }
-}
+pub static mut AST: Ast<'static> = Ast {
+    registers: AST_ADDRESS,
+    callback: OptionalCell::empty(),
+};
 
 impl Controller for Ast<'_> {
     type Config = &'static dyn time::AlarmClient;
@@ -298,7 +294,7 @@ impl<'a> Ast<'a> {
         regs.cv.set(val);
     }
 
-    pub fn handle_interrupt(&self) {
+    pub fn handle_interrupt(&mut self) {
         self.clear_alarm();
         self.callback.map(|cb| {
             cb.alarm();

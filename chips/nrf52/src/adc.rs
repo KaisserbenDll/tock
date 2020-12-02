@@ -239,6 +239,8 @@ pub enum AdcChannel {
 const SAADC_BASE: StaticRef<AdcRegisters> =
     unsafe { StaticRef::new(0x40007000 as *const AdcRegisters) };
 
+pub static mut ADC: Adc = Adc::new(SAADC_BASE);
+
 // Buffer to save completed sample to.
 static mut SAMPLE: [u16; 1] = [0; 1];
 
@@ -248,9 +250,10 @@ pub struct Adc {
 }
 
 impl Adc {
-    pub const fn new() -> Self {
-        Self {
-            registers: SAADC_BASE,
+    const fn new(registers: StaticRef<AdcRegisters>) -> Adc {
+        Adc {
+            registers: registers,
+            // state: Cell::new(State::Idle),
             client: OptionalCell::empty(),
         }
     }

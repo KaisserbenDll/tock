@@ -2,11 +2,9 @@ use core::fmt::Write;
 use cortexm4;
 use kernel::Chip;
 
-use crate::adc;
 use crate::dma;
 use crate::gpio;
 use crate::nvic;
-use crate::ref_module;
 use crate::timer;
 use crate::uart;
 use crate::wdt;
@@ -28,14 +26,6 @@ impl Msp432 {
         dma::DMA_CHANNELS[uart::UART0.tx_dma_chan].set_client(&uart::UART0);
         dma::DMA_CHANNELS[uart::UART0.rx_dma_chan].set_client(&uart::UART0);
 
-        // Setup Reference Module, Timer and DMA for ADC
-        adc::ADC.set_modules(
-            &ref_module::REF,
-            &timer::TIMER_A3,
-            &dma::DMA_CHANNELS[adc::ADC.dma_chan],
-        );
-        dma::DMA_CHANNELS[adc::ADC.dma_chan].set_client(&adc::ADC);
-
         Msp432 {
             mpu: cortexm4::mpu::MPU::new(),
             userspace_kernel_boundary: cortexm4::syscall::SysCall::new(),
@@ -56,7 +46,6 @@ impl Chip for Msp432 {
             loop {
                 if let Some(interrupt) = cortexm4::nvic::next_pending() {
                     match interrupt {
-                        nvic::ADC => adc::ADC.handle_interrupt(),
                         nvic::DMA_INT0 => dma::handle_interrupt(0),
                         nvic::DMA_INT1 => dma::handle_interrupt(1),
                         nvic::DMA_INT2 => dma::handle_interrupt(2),

@@ -10,6 +10,8 @@ use kernel::common::StaticRef;
 use kernel::hil::ble_advertising;
 use kernel::hil::ble_advertising::RadioChannel;
 
+pub static mut BLE: Ble = Ble::new(BLE_BASE);
+
 const BLE_BASE: StaticRef<BleRegisters> =
     unsafe { StaticRef::new(0x5000_C000 as *const BleRegisters) };
 
@@ -266,9 +268,9 @@ pub struct Ble<'a> {
 }
 
 impl<'a> Ble<'a> {
-    pub const fn new() -> Self {
+    pub const fn new(base: StaticRef<BleRegisters>) -> Self {
         Self {
-            registers: BLE_BASE,
+            registers: base,
             rx_client: OptionalCell::empty(),
             tx_client: OptionalCell::empty(),
             buffer: TakeCell::empty(),

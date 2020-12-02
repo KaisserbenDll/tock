@@ -11,7 +11,6 @@
 
 #![allow(dead_code)] // Components are intended to be conditionally included
 
-use earlgrey::usbdev::Usb;
 use kernel::capabilities;
 use kernel::component::Component;
 use kernel::create_capability;
@@ -19,12 +18,11 @@ use kernel::static_init;
 
 pub struct UsbComponent {
     board_kernel: &'static kernel::Kernel,
-    usb: &'static Usb<'static>,
 }
 
 impl UsbComponent {
-    pub fn new(usb: &'static Usb, board_kernel: &'static kernel::Kernel) -> Self {
-        Self { usb, board_kernel }
+    pub fn new(board_kernel: &'static kernel::Kernel) -> UsbComponent {
+        UsbComponent { board_kernel }
     }
 }
 
@@ -42,7 +40,7 @@ impl Component for UsbComponent {
         let usb_client = static_init!(
             capsules::usb::usbc_client::Client<'static, lowrisc::usbdev::Usb<'static>>,
             capsules::usb::usbc_client::Client::new(
-                self.usb,
+                &earlgrey::usbdev::USB,
                 capsules::usb::usbc_client::MAX_CTRL_PACKET_SIZE_EARLGREY
             )
         );

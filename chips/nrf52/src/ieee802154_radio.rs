@@ -658,7 +658,7 @@ register_bitfields! [u32,
     ]
 ];
 
-pub struct Radio<'p> {
+pub struct Radio {
     registers: StaticRef<RadioRegisters>,
     tx_power: Cell<TxPower>,
     rx_client: OptionalCell<&'static dyn radio::RxClient>,
@@ -673,13 +673,13 @@ pub struct Radio<'p> {
     random_nonce: Cell<u32>,
     channel: Cell<RadioChannel>,
     transmitting: Cell<bool>,
-    timer0: OptionalCell<&'p crate::timer::TimerAlarm<'p>>,
-    ppi: &'p crate::ppi::Ppi,
 }
 
-impl<'p> Radio<'p> {
-    pub const fn new(ppi: &'p crate::ppi::Ppi) -> Self {
-        Self {
+pub static mut RADIO: Radio = Radio::new();
+
+impl Radio {
+    pub const fn new() -> Radio {
+        Radio {
             registers: RADIO_BASE,
             tx_power: Cell::new(TxPower::ZerodBm),
             rx_client: OptionalCell::empty(),
@@ -694,13 +694,7 @@ impl<'p> Radio<'p> {
             random_nonce: Cell::new(0xDEADBEEF),
             channel: Cell::new(RadioChannel::DataChannel26),
             transmitting: Cell::new(false),
-            timer0: OptionalCell::empty(),
-            ppi,
         }
-    }
-
-    pub fn set_timer_ref(&self, timer: &'p crate::timer::TimerAlarm<'p>) {
-        self.timer0.set(timer);
     }
 
     pub fn is_enabled(&self) -> bool {
@@ -777,7 +771,9 @@ impl<'p> Radio<'p> {
                 && self.registers.state.get() == nrf5x::constants::RADIO_STATE_RXIDLE
             {
                 if self.cca_count.get() > 0 {
-                    self.ppi.disable(ppi::Channel::CH21::SET);
+                    unsafe {
+                        ppi::PPI.disable(ppi::Channel::CH21::SET);
+                    }
                 }
                 self.registers.task_ccastart.write(Task::ENABLE::SET);
             } else {
@@ -806,15 +802,15 @@ impl<'p> Radio<'p> {
                 self.cca_count.set(self.cca_count.get() + 1);
                 self.cca_be.set(self.cca_be.get() + 1);
                 let backoff_periods = self.random_nonce() & ((1 << self.cca_be.get()) - 1);
-                self.ppi.enable(ppi::Channel::CH21::SET);
-                self.timer0
-                    .expect("Missing timer reference for CSMA")
-                    .set_alarm(
+                unsafe {
+                    ppi::PPI.enable(ppi::Channel::CH21::SET);
+                    nrf5x::timer::TIMER0.set_alarm(
                         kernel::hil::time::Ticks32::from(0),
                         kernel::hil::time::Ticks32::from(
                             backoff_periods * (IEEE802154_BACKOFF_PERIOD as u32),
                         ),
                     );
+                }
             } else {
                 self.transmitting.set(false);
                 //if we are transmitting, the CRCstatus check is always going to be an error
@@ -1014,9 +1010,9 @@ impl<'p> Radio<'p> {
     }
 }
 
-impl<'p> kernel::hil::radio::Radio for Radio<'p> {}
+impl kernel::hil::radio::Radio for Radio {}
 
-impl<'p> kernel::hil::radio::RadioConfig for Radio<'p> {
+impl kernel::hil::radio::RadioConfig for Radio {
     fn initialize(
         &self,
         _spi_buf: &'static mut [u8],
@@ -1133,7 +1129,7 @@ impl<'p> kernel::hil::radio::RadioConfig for Radio<'p> {
     }
 }
 
-impl<'p> kernel::hil::radio::RadioData for Radio<'p> {
+impl kernel::hil::radio::RadioData for Radio {
     fn set_receive_client(&self, client: &'static dyn radio::RxClient, buffer: &'static mut [u8]) {
         self.rx_client.set(client);
         self.rx_buf.replace(buffer);

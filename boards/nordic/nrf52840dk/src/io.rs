@@ -4,8 +4,7 @@ use cortexm4;
 use kernel::debug;
 use kernel::debug::IoWrite;
 use kernel::hil::led;
-use kernel::hil::uart;
-use kernel::hil::uart::Configure;
+use kernel::hil::uart::{self, Configure};
 use nrf52840::gpio::Pin;
 
 use crate::CHIP;
@@ -42,10 +41,7 @@ impl IoWrite for Writer {
     fn write(&mut self, buf: &[u8]) {
         match self {
             Writer::WriterUart(ref mut initialized) => {
-                // Here, we create a second instance of the Uarte struct.
-                // This is okay because we only call this during a panic, and
-                // we will never actually process the interrupts
-                let uart = nrf52840::uart::Uarte::new();
+                let uart = unsafe { &mut nrf52840::uart::UARTE0 };
                 if !*initialized {
                     *initialized = true;
                     uart.configure(uart::Parameters {

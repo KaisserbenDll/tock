@@ -74,7 +74,6 @@ use kernel::hil::time::Counter;
 #[allow(unused_imports)]
 use kernel::{capabilities, create_capability, debug, debug_gpio, debug_verbose, static_init};
 use nrf52832::gpio::Pin;
-use nrf52832::interrupt_service::Nrf52832DefaultPeripherals;
 use nrf52832::rtc::Rtc;
 use nrf52_components::{self, UartChannel, UartPins};
 
@@ -120,7 +119,7 @@ const NUM_PROCS: usize = 4;
 static mut PROCESSES: [Option<&'static dyn kernel::procs::ProcessType>; NUM_PROCS] = [None; 4];
 
 // Static reference to chip for panic dumps
-static mut CHIP: Option<&'static nrf52832::chip::NRF52<Nrf52832DefaultPeripherals>> = None;
+static mut CHIP: Option<&'static nrf52832::chip::Chip> = None;
 
 /// Dummy buffer that causes the linker to reserve enough space for the stack.
 #[no_mangle]
@@ -181,16 +180,6 @@ impl kernel::Platform for Platform {
 pub unsafe fn reset_handler() {
     // Loads relocations and clears BSS
     nrf52832::init();
-    let ppi = static_init!(nrf52832::ppi::Ppi, nrf52832::ppi::Ppi::new());
-    // Initialize chip peripheral drivers
-    let nrf52832_peripherals = static_init!(
-        Nrf52832DefaultPeripherals,
-        Nrf52832DefaultPeripherals::new(ppi)
-    );
-
-    // set up circular peripheral dependencies
-    nrf52832_peripherals.init();
-    let base_peripherals = &nrf52832_peripherals.nrf52;
 
     let board_kernel = static_init!(kernel::Kernel, kernel::Kernel::new(&PROCESSES));
 
@@ -199,20 +188,20 @@ pub unsafe fn reset_handler() {
         components::gpio_component_helper!(
             nrf52832::gpio::GPIOPin,
             // Bottom right header on DK board
-            0 => &base_peripherals.gpio_port[Pin::P0_03],
-            1 => &base_peripherals.gpio_port[Pin::P0_04],
-            2 => &base_peripherals.gpio_port[Pin::P0_28],
-            3 => &base_peripherals.gpio_port[Pin::P0_29],
-            4 => &base_peripherals.gpio_port[Pin::P0_30],
-            5 => &base_peripherals.gpio_port[Pin::P0_31],
+            0 => &nrf52832::gpio::PORT[Pin::P0_03],
+            1 => &nrf52832::gpio::PORT[Pin::P0_04],
+            2 => &nrf52832::gpio::PORT[Pin::P0_28],
+            3 => &nrf52832::gpio::PORT[Pin::P0_29],
+            4 => &nrf52832::gpio::PORT[Pin::P0_30],
+            5 => &nrf52832::gpio::PORT[Pin::P0_31],
             // Top mid header on DK board
-            6 => &base_peripherals.gpio_port[Pin::P0_12],
-            7 => &base_peripherals.gpio_port[Pin::P0_11],
+            6 => &nrf52832::gpio::PORT[Pin::P0_12],
+            7 => &nrf52832::gpio::PORT[Pin::P0_11],
             // Top left header on DK board
-            8 => &base_peripherals.gpio_port[Pin::P0_27],
-            9 => &base_peripherals.gpio_port[Pin::P0_26],
-            10 => &base_peripherals.gpio_port[Pin::P0_02],
-            11 => &base_peripherals.gpio_port[Pin::P0_25]
+            8 => &nrf52832::gpio::PORT[Pin::P0_27],
+            9 => &nrf52832::gpio::PORT[Pin::P0_26],
+            10 => &nrf52832::gpio::PORT[Pin::P0_02],
+            11 => &nrf52832::gpio::PORT[Pin::P0_25]
         ),
     )
     .finalize(components::gpio_component_buf!(nrf52832::gpio::GPIOPin));
@@ -222,22 +211,22 @@ pub unsafe fn reset_handler() {
         components::button_component_helper!(
             nrf52832::gpio::GPIOPin,
             (
-                &base_peripherals.gpio_port[BUTTON1_PIN],
+                &nrf52832::gpio::PORT[BUTTON1_PIN],
                 kernel::hil::gpio::ActivationMode::ActiveLow,
                 kernel::hil::gpio::FloatingState::PullUp
             ), //13
             (
-                &base_peripherals.gpio_port[BUTTON2_PIN],
+                &nrf52832::gpio::PORT[BUTTON2_PIN],
                 kernel::hil::gpio::ActivationMode::ActiveLow,
                 kernel::hil::gpio::FloatingState::PullUp
             ), //14
             (
-                &base_peripherals.gpio_port[BUTTON3_PIN],
+                &nrf52832::gpio::PORT[BUTTON3_PIN],
                 kernel::hil::gpio::ActivationMode::ActiveLow,
                 kernel::hil::gpio::FloatingState::PullUp
             ), //15
             (
-                &base_peripherals.gpio_port[BUTTON4_PIN],
+                &nrf52832::gpio::PORT[BUTTON4_PIN],
                 kernel::hil::gpio::ActivationMode::ActiveLow,
                 kernel::hil::gpio::FloatingState::PullUp
             ) //16
@@ -248,28 +237,25 @@ pub unsafe fn reset_handler() {
     let led = components::led::LedsComponent::new(components::led_component_helper!(
         nrf52832::gpio::GPIOPin,
         (
-            &base_peripherals.gpio_port[LED1_PIN],
+            &nrf52832::gpio::PORT[LED1_PIN],
             kernel::hil::gpio::ActivationMode::ActiveLow
         ),
         (
-            &base_peripherals.gpio_port[LED2_PIN],
+            &nrf52832::gpio::PORT[LED2_PIN],
             kernel::hil::gpio::ActivationMode::ActiveLow
         ),
         (
-            &base_peripherals.gpio_port[LED3_PIN],
+            &nrf52832::gpio::PORT[LED3_PIN],
             kernel::hil::gpio::ActivationMode::ActiveLow
         ),
         (
-            &base_peripherals.gpio_port[LED4_PIN],
+            &nrf52832::gpio::PORT[LED4_PIN],
             kernel::hil::gpio::ActivationMode::ActiveLow
         )
     ))
     .finalize(components::led_component_buf!(nrf52832::gpio::GPIOPin));
 
-    let chip = static_init!(
-        nrf52832::chip::NRF52<Nrf52832DefaultPeripherals>,
-        nrf52832::chip::NRF52::new(nrf52832_peripherals)
-    );
+    let chip = static_init!(nrf52832::chip::Chip, nrf52832::chip::new());
     CHIP = Some(chip);
 
     nrf52_components::startup::NrfStartupComponent::new(
@@ -286,7 +272,7 @@ pub unsafe fn reset_handler() {
     let main_loop_capability = create_capability!(capabilities::MainLoopCapability);
     let memory_allocation_capability = create_capability!(capabilities::MemoryAllocationCapability);
 
-    let gpio_port = &base_peripherals.gpio_port;
+    let gpio_port = &nrf52832::gpio::PORT;
     // Configure kernel debug gpios as early as possible
     kernel::debug::assign_gpios(
         Some(&gpio_port[LED1_PIN]),
@@ -294,19 +280,14 @@ pub unsafe fn reset_handler() {
         Some(&gpio_port[LED3_PIN]),
     );
 
-    let rtc = &base_peripherals.rtc;
+    let rtc = &nrf52832::rtc::RTC;
     rtc.start();
     let mux_alarm = components::alarm::AlarmMuxComponent::new(rtc)
         .finalize(components::alarm_mux_component_helper!(nrf52832::rtc::Rtc));
     let alarm = components::alarm::AlarmDriverComponent::new(board_kernel, mux_alarm)
         .finalize(components::alarm_component_helper!(nrf52832::rtc::Rtc));
     let uart_channel = UartChannel::Pins(UartPins::new(UART_RTS, UART_TXD, UART_CTS, UART_RXD));
-    let channel = nrf52_components::UartChannelComponent::new(
-        uart_channel,
-        mux_alarm,
-        &base_peripherals.uarte0,
-    )
-    .finalize(());
+    let channel = nrf52_components::UartChannelComponent::new(uart_channel, mux_alarm).finalize(());
 
     let dynamic_deferred_call_clients =
         static_init!([DynamicDeferredCallClientState; 2], Default::default());
@@ -331,19 +312,21 @@ pub unsafe fn reset_handler() {
     components::debug_writer::DebugWriterComponent::new(uart_mux).finalize(());
 
     let ble_radio =
-        nrf52_components::BLEComponent::new(board_kernel, &base_peripherals.ble_radio, mux_alarm)
+        nrf52_components::BLEComponent::new(board_kernel, &nrf52832::ble_radio::RADIO, mux_alarm)
             .finalize(());
 
-    let temp =
-        components::temperature::TemperatureComponent::new(board_kernel, &base_peripherals.temp)
-            .finalize(());
+    let temp = components::temperature::TemperatureComponent::new(
+        board_kernel,
+        &nrf52832::temperature::TEMP,
+    )
+    .finalize(());
 
-    let rng = components::rng::RngComponent::new(board_kernel, &base_peripherals.trng).finalize(());
+    let rng = components::rng::RngComponent::new(board_kernel, &nrf52832::trng::TRNG).finalize(());
 
     // Initialize AC using AIN5 (P0.29) as VIN+ and VIN- as AIN0 (P0.02)
     // These are hardcoded pin assignments specified in the driver
     let analog_comparator = components::analog_comparator::AcComponent::new(
-        &base_peripherals.acomp,
+        &nrf52832::acomp::ACOMP,
         components::acomp_component_helper!(
             nrf52832::acomp::Channel,
             &nrf52832::acomp::CHANNEL_AC0

@@ -22,7 +22,6 @@ use kernel::static_init;
 
 pub struct UsbComponent {
     board_kernel: &'static kernel::Kernel,
-    usbc: &'static sam4l::usbc::Usbc<'static>,
 }
 
 type UsbDevice = capsules::usb::usb_user::UsbSyscallDriver<
@@ -31,11 +30,10 @@ type UsbDevice = capsules::usb::usb_user::UsbSyscallDriver<
 >;
 
 impl UsbComponent {
-    pub fn new(
-        board_kernel: &'static kernel::Kernel,
-        usbc: &'static sam4l::usbc::Usbc<'static>,
-    ) -> UsbComponent {
-        UsbComponent { board_kernel, usbc }
+    pub fn new(board_kernel: &'static kernel::Kernel) -> UsbComponent {
+        UsbComponent {
+            board_kernel: board_kernel,
+        }
     }
 }
 
@@ -50,11 +48,11 @@ impl Component for UsbComponent {
         let usb_client = static_init!(
             capsules::usb::usbc_client::Client<'static, sam4l::usbc::Usbc<'static>>,
             capsules::usb::usbc_client::Client::new(
-                &self.usbc,
+                &sam4l::usbc::USBC,
                 capsules::usb::usbc_client::MAX_CTRL_PACKET_SIZE_SAM4L
             )
         );
-        self.usbc.set_client(usb_client);
+        sam4l::usbc::USBC.set_client(usb_client);
 
         // Configure the USB userspace driver
         let usb_driver = static_init!(

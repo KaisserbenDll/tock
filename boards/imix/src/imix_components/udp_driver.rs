@@ -17,6 +17,12 @@
 //!     .finalize();
 //! ```
 
+// Author: Hudson Ayers <hayers@stanford.edu>
+// Author: Armin Namavari <arminn@stanford.edu>
+// Last Modified: 11/25/2019
+
+#![allow(dead_code)] // Components are intended to be conditionally included
+
 use capsules;
 use capsules::net::ipv6::ip_utils::IPAddr;
 use capsules::net::ipv6::ipv6_send::IP6SendStruct;
@@ -28,80 +34,57 @@ use capsules::net::udp::udp_recv::MuxUdpReceiver;
 use capsules::net::udp::udp_recv::UDPReceiver;
 use capsules::net::udp::udp_send::{MuxUdpSender, UDPSendStruct, UDPSender};
 use capsules::virtual_alarm::VirtualMuxAlarm;
-use core::mem::MaybeUninit;
+
+use kernel::{create_capability, static_init};
+
 use kernel;
 use kernel::capabilities;
 use kernel::capabilities::NetworkCapabilityCreationCapability;
 use kernel::component::Component;
-use kernel::hil::time::Alarm;
-use kernel::{create_capability, static_init, static_init_half};
+use sam4l;
 
 const UDP_HDR_SIZE: usize = 8;
-const MAX_PAYLOAD_LEN: usize = super::udp_mux::MAX_PAYLOAD_LEN;
+const PAYLOAD_LEN: usize = super::udp_mux::PAYLOAD_LEN;
 
-static mut DRIVER_BUF: [u8; MAX_PAYLOAD_LEN - UDP_HDR_SIZE] = [0; MAX_PAYLOAD_LEN - UDP_HDR_SIZE];
+static mut DRIVER_BUF: [u8; PAYLOAD_LEN - UDP_HDR_SIZE] = [0; PAYLOAD_LEN - UDP_HDR_SIZE];
 
-// Setup static space for the objects.
-#[macro_export]
-macro_rules! udp_driver_component_helper {
-    ($A:ty) => {{
-        use capsules::net::udp::udp_send::UDPSendStruct;
-        use core::mem::MaybeUninit;
-        static mut BUF0: MaybeUninit<
-            UDPSendStruct<
-                'static,
-                capsules::net::ipv6::ipv6_send::IP6SendStruct<
-                    'static,
-                    VirtualMuxAlarm<'static, $A>,
-                >,
-            >,
-        > = MaybeUninit::uninit();
-        (&mut BUF0,)
-    };};
-}
-
-pub struct UDPDriverComponent<A: Alarm<'static> + 'static> {
+pub struct UDPDriverComponent {
     board_kernel: &'static kernel::Kernel,
-    udp_send_mux:
-        &'static MuxUdpSender<'static, IP6SendStruct<'static, VirtualMuxAlarm<'static, A>>>,
+    udp_send_mux: &'static MuxUdpSender<
+        'static,
+        IP6SendStruct<'static, VirtualMuxAlarm<'static, sam4l::ast::Ast<'static>>>,
+    >,
     udp_recv_mux: &'static MuxUdpReceiver<'static>,
     port_table: &'static UdpPortManager,
     interface_list: &'static [IPAddr],
 }
 
-impl<A: Alarm<'static>> UDPDriverComponent<A> {
+impl UDPDriverComponent {
     pub fn new(
         board_kernel: &'static kernel::Kernel,
         udp_send_mux: &'static MuxUdpSender<
             'static,
-            IP6SendStruct<'static, VirtualMuxAlarm<'static, A>>,
+            IP6SendStruct<'static, VirtualMuxAlarm<'static, sam4l::ast::Ast<'static>>>,
         >,
         udp_recv_mux: &'static MuxUdpReceiver<'static>,
         port_table: &'static UdpPortManager,
         interface_list: &'static [IPAddr],
-    ) -> Self {
-        Self {
-            board_kernel,
-            udp_send_mux,
-            udp_recv_mux,
-            port_table,
-            interface_list,
+    ) -> UDPDriverComponent {
+        UDPDriverComponent {
+            board_kernel: board_kernel,
+            udp_send_mux: udp_send_mux,
+            udp_recv_mux: udp_recv_mux,
+            port_table: port_table,
+            interface_list: interface_list,
         }
     }
 }
 
-impl<A: Alarm<'static>> Component for UDPDriverComponent<A> {
-    type StaticInput = (
-        &'static mut MaybeUninit<
-            UDPSendStruct<
-                'static,
-                capsules::net::ipv6::ipv6_send::IP6SendStruct<'static, VirtualMuxAlarm<'static, A>>,
-            >,
-        >,
-    );
+impl Component for UDPDriverComponent {
+    type StaticInput = ();
     type Output = &'static capsules::net::udp::UDPDriver<'static>;
 
-    unsafe fn finalize(self, static_buffer: Self::StaticInput) -> Self::Output {
+    unsafe fn finalize(self, _s: Self::StaticInput) -> Self::Output {
         let grant_cap = create_capability!(capabilities::MemoryAllocationCapability);
         // TODO: change initialization below
         let create_cap = create_capability!(NetworkCapabilityCreationCapability);
@@ -109,11 +92,13 @@ impl<A: Alarm<'static>> Component for UDPDriverComponent<A> {
             UdpVisibilityCapability,
             UdpVisibilityCapability::new(&create_cap)
         );
-        let udp_send = static_init_half!(
-            static_buffer.0,
+        let udp_send = static_init!(
             UDPSendStruct<
                 'static,
-                capsules::net::ipv6::ipv6_send::IP6SendStruct<'static, VirtualMuxAlarm<'static, A>>,
+                capsules::net::ipv6::ipv6_send::IP6SendStruct<
+                    'static,
+                    VirtualMuxAlarm<'static, sam4l::ast::Ast<'static>>,
+                >,
             >,
             UDPSendStruct::new(self.udp_send_mux, udp_vis)
         );
@@ -135,7 +120,7 @@ impl<A: Alarm<'static>> Component for UDPDriverComponent<A> {
                 udp_send,
                 self.board_kernel.create_grant(&grant_cap),
                 self.interface_list,
-                MAX_PAYLOAD_LEN,
+                PAYLOAD_LEN,
                 self.port_table,
                 kernel::common::leasable_buffer::LeasableBuffer::new(&mut DRIVER_BUF),
                 &DRIVER_CAP,

@@ -5,12 +5,11 @@
 #![crate_name = "earlgrey"]
 #![crate_type = "rlib"]
 
-pub mod chip_config;
+mod chip_config;
 mod interrupts;
 
 pub mod aes;
 pub mod chip;
-pub mod flash_ctrl;
 pub mod gpio;
 pub mod hmac;
 pub mod i2c;

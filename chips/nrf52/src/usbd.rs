@@ -606,6 +606,8 @@ register_bitfields! [u32,
     ]
 ];
 
+pub static mut USBD: Usbd<'static> = Usbd::new();
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum UsbState {
     Disabled,
@@ -707,11 +709,10 @@ pub struct Usbd<'a> {
     dma_pending: Cell<bool>,
     client: OptionalCell<&'a dyn hil::usb::Client<'a>>,
     descriptors: [Endpoint<'a>; NUM_ENDPOINTS],
-    power: OptionalCell<&'a power::Power<'a>>,
 }
 
 impl<'a> Usbd<'a> {
-    pub const fn new() -> Self {
+    const fn new() -> Self {
         Usbd {
             registers: USBD_BASE,
             client: OptionalCell::empty(),
@@ -727,12 +728,7 @@ impl<'a> Usbd<'a> {
                 Endpoint::new(),
                 Endpoint::new(),
             ],
-            power: OptionalCell::empty(),
         }
-    }
-
-    pub fn set_power_ref(&self, power: &'a power::Power<'a>) {
-        self.power.set(power);
     }
 
     fn has_errata_166(&self) -> bool {
@@ -921,19 +917,18 @@ impl<'a> Usbd<'a> {
                 );
             }
         }
-        let power = self
-            .power
-            .expect("failed to initialize power reference for USB");
-        if !power.is_vbus_present() {
-            debug_info!("[!] VBUS power is not detected.");
-            return;
+        unsafe {
+            if !power::POWER.is_vbus_present() {
+                debug_info!("[!] VBUS power is not detected.");
+                return;
+            }
         }
         if self.get_state() == UsbState::Disabled {
             self.enable();
         }
         if self.get_state() != UsbState::PoweredOn {
             debug_info!("Waiting for power regulators...");
-            while power.is_vbus_present() && power.is_usb_power_ready() {}
+            unsafe { while power::POWER.is_vbus_present() && !power::POWER.is_usb_power_ready() {} }
         }
         debug_info!("usbc::start() - subscribing to interrupts.");
         self.registers.intenset.write(

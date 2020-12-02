@@ -111,8 +111,10 @@ pub struct Trng<'a> {
     randomness: Cell<u32>,
 }
 
+pub static mut TRNG: Trng<'static> = Trng::new();
+
 impl<'a> Trng<'a> {
-    pub const fn new() -> Trng<'a> {
+    const fn new() -> Trng<'a> {
         Trng {
             registers: RNG_BASE,
             client: OptionalCell::empty(),

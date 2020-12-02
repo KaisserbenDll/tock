@@ -132,8 +132,10 @@ pub struct AesECB<'a> {
     end_idx: Cell<usize>,
 }
 
+pub static mut AESECB: AesECB = AesECB::new();
+
 impl<'a> AesECB<'a> {
-    pub const fn new() -> AesECB<'a> {
+    const fn new() -> AesECB<'a> {
         AesECB {
             registers: AESECB_BASE,
             client: OptionalCell::empty(),

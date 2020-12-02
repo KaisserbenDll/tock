@@ -10,6 +10,8 @@ use kernel::hil::time::{
 
 use kernel::ReturnCode;
 
+pub static mut STIMER: STimer = STimer::new(STIMER_BASE);
+
 const STIMER_BASE: StaticRef<STimerRegisters> =
     unsafe { StaticRef::new(0x4000_8000 as *const STimerRegisters) };
 
@@ -98,10 +100,9 @@ pub struct STimer<'a> {
 }
 
 impl<'a> STimer<'_> {
-    // Unsafe bc of use of STIMER_BASE internally
-    pub const fn new() -> STimer<'a> {
+    const fn new(base: StaticRef<STimerRegisters>) -> STimer<'a> {
         STimer {
-            registers: STIMER_BASE,
+            registers: base,
             client: OptionalCell::empty(),
         }
     }
